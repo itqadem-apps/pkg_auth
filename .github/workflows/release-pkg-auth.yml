@@ -1,0 +1,58 @@
+name: Release pkg_auth
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (e.g. 0.1.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Tag and release pkg_auth
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        run: |
+          if ! [[ "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z]+)?$ ]]; then
+            echo "Invalid version format: ${{ inputs.version }}" >&2
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build pkg_auth artifacts (sdist + wheel)
+        working-directory: packages/pkg_auth
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          python -m build
+
+      - name: Create GitHub Release and upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: pkg_auth-v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: pkg_auth v${{ inputs.version }}
+          fail_on_unmatched_files: false
+          body: |
+            Install directly from the tag:
+
+            pip install "git+https://github.com/${{ github.repository }}.git@pkg_auth-v${{ inputs.version }}#subdirectory=packages/pkg_auth"
+
+            Or from release assets (wheel/sdist) attached to this release.
+          files: |
+            packages/pkg_auth/dist/*
+

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .decorators import FastAPIDecorators
 from .deps import FastAPIAuthorization
 from ..common.auth_factory import create_auth_dependencies_from_keycloak, AuthDependencies
 
@@ -32,4 +33,4 @@ def create_fastapi_auth(
     return FastAPIAuthorization(auth=auth)
 
 
-__all__ = ["FastAPIAuthorization", "create_fastapi_auth"]
+__all__ = ["FastAPIAuthorization", "FastAPIDecorators", "create_fastapi_auth"]
