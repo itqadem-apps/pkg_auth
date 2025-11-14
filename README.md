@@ -4,14 +4,17 @@ Clean-architecture auth core for multiple Python frameworks. This package provid
 
 Install from GitHub (no PyPI):
 
-pip install "pkg-auth @ git+https://github.com/OWNER/REPO.git@pkg_auth-vX.Y.Z#subdirectory=packages/pkg_auth"
+pip install "pkg-auth @ git+https://github.com/OWNER/REPO.git@pkg_auth-vX.Y.Z"
 
 Extras (FastAPI / Strawberry):
 
-pip install "pkg-auth[fastapi] @ git+https://github.com/OWNER/REPO.git@pkg_auth-vX.Y.Z#subdirectory=packages/pkg_auth"
-pip install "pkg-auth[strawberry] @ git+https://github.com/OWNER/REPO.git@pkg_auth-vX.Y.Z#subdirectory=packages/pkg_auth"
+pip install "pkg-auth[fastapi] @ git+https://github.com/OWNER/REPO.git@pkg_auth-vX.Y.Z"
+pip install "pkg-auth[strawberry] @ git+https://github.com/OWNER/REPO.git@pkg_auth-vX.Y.Z"
 
 Replace OWNER/REPO and X.Y.Z with your repository and the package tag (e.g. pkg_auth-v0.2.0).
+
+Monorepo note: if the package lives in a subdirectory, append
+`#subdirectory=path/to/pkg` to the URL.
 
 
 FastAPI
