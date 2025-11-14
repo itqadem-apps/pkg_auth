@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pkg-auth"
+version = "0.1.0"
+description = "Clean-architecture auth core for multiple Python frameworks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+authors = [
+    { name = "Fritill", email = "info@fritill.ae" }
+]
+
+# Runtime dependencies
+dependencies = [
+    "pyjwt>=2.10.1",
+    "requests>=2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0,<9.0.0",
+    "mypy>=1.11.0,<2.0.0",
+    "types-requests>=2.32.0.0,<3.0.0.0",
+    "types-PyJWT>=1.7.0,<2.0.0",
+]
+
+fastapi = [
+    "fastapi>=0.115",
+    "starlette>=0.37",
+]
+
+strawberry = [
+    "strawberry-graphql>=0.255",
+]
+
+all = [
+    "fastapi>=0.115",
+    "starlette>=0.37",
+    "strawberry-graphql>=0.255",
+]
+
+
+[project.urls]
+Homepage = "https://github.com/itqadem-apps/pkg_auth"
+
+[tool.setuptools.packages.find]
+where = ["src"]
