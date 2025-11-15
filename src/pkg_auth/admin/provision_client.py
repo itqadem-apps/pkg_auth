@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Optional, Iterable, Any
 
-from pkg_auth.admin import KCAdminSettings, KeycloakAdminClient, _ensure_api_client, _ensure_roles, \
-    _ensure_frontend_mappers, _remove_frontend_mappers
+from . import KeycloakAdminClient, _ensure_api_client, _ensure_roles, _ensure_frontend_mappers, _remove_frontend_mappers
+from .settings import KCAdminSettings
 
 
 async def provision_keycloak_client(
