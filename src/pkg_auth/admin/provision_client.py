@@ -2,19 +2,20 @@ from __future__ import annotations
 
 from typing import Optional, Iterable, Any
 
-from . import KeycloakAdminClient, _ensure_api_client, _ensure_roles, _ensure_frontend_mappers, _remove_frontend_mappers
+from .client import KeycloakAdminClient
+from .helpers import _ensure_api_client, _ensure_roles, _ensure_frontend_mappers, _remove_frontend_mappers
 from .settings import KCAdminSettings
 
 
 async def provision_keycloak_client(
-    *,
-    settings: KCAdminSettings,
-    client_id: Optional[str] = None,
-    permissions: Optional[Iterable[str]] = None,
-    frontend_client_ids: Optional[Iterable[str]] = None,
-    remove_frontend_client_ids: Optional[Iterable[str]] = None,
-    strict_roles: bool = False,
-    strict_audience: bool = False,
+        *,
+        settings: KCAdminSettings,
+        client_id: Optional[str] = None,
+        permissions: Optional[Iterable[str]] = None,
+        frontend_client_ids: Optional[Iterable[str]] = None,
+        remove_frontend_client_ids: Optional[Iterable[str]] = None,
+        strict_roles: bool = False,
+        strict_audience: bool = False,
 ) -> dict[str, Any]:
     """
     High-level async helper to provision a Keycloak API client.
