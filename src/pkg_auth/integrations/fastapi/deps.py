@@ -6,7 +6,8 @@ from typing import Callable
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
-from .security import bearer_scheme, extract_token_from_request
+from .decorators import FastAPIDecorators
+from .security import bearer_scheme, extract_token_from_request, DEFAULT_COOKIE_NAME
 from ..common.auth_factory import AuthDependencies
 from ...domain.entities import AccessContext
 from ...domain.exceptions import (
@@ -27,6 +28,14 @@ class FastAPIAuthorization:
     """
 
     auth: AuthDependencies
+
+    # ------------------------------------------------------------------ #
+    # Factories
+    # ------------------------------------------------------------------ #
+
+    def decorators(self, *, cookie_name: str = DEFAULT_COOKIE_NAME) -> FastAPIDecorators:
+        """Return decorator helpers sharing the same auth dependencies."""
+        return FastAPIDecorators(auth=self.auth, cookie_name=cookie_name)
 
     # ------------------------------------------------------------------ #
     # Base dependencies

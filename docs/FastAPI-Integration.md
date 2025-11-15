@@ -59,17 +59,16 @@ Same semantics, injected `current_user` argument added to your handler.
 ### `app/auth.py`
 
 ```python
-from pkg_auth.integrations.common.auth_factory import create_auth_dependencies_from_keycloak
-from pkg_auth.integrations.fastapi import FastAPIDecorators
+from pkg_auth.integrations.fastapi import create_fastapi_auth
 from app.config import settings
 
-auth_core = create_auth_dependencies_from_keycloak(
+fastapi_auth = create_fastapi_auth(
     keycloak_base_url=settings.KEYCLOAK_BASE_URL,
     realm=settings.KEYCLOAK_REALM,
     client_id=settings.KEYCLOAK_CLIENT_ID,
 )
 
-authz = FastAPIDecorators(auth=auth_core)  # cookie_name can be customized
+authz = fastapi_auth.decorators()  # cookie_name can be customized
 ```
 
 ### `app/routes.py`

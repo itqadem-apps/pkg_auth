@@ -36,19 +36,15 @@ class FastAPIDecorators:
     Usage example in your FastAPI app:
 
         # app/auth.py
-        from pkg_auth.integrations.common.auth_factory import (
-            create_auth_dependencies_from_keycloak,
-        )
-        from pkg_auth.integrations.fastapi.decorators import FastAPIDecorators
+        from pkg_auth.integrations.fastapi import create_fastapi_auth
         from app.config import settings
 
-        auth_core = create_auth_dependencies_from_keycloak(
+        fastapi_auth = create_fastapi_auth(
             keycloak_base_url=settings.KEYCLOAK_BASE_URL,
             realm=settings.KEYCLOAK_REALM,
             client_id=settings.KEYCLOAK_CLIENT_ID,
         )
-
-        auth_decorators = FastAPIDecorators(auth=auth_core)
+        auth_decorators = fastapi_auth.decorators()
 
         # app/routes.py
         from fastapi import APIRouter, Request
@@ -357,21 +353,17 @@ class FastAPIDecorators:
 """
 # app/auth.py (example)
 
-from pkg_auth.integrations.common.auth_factory import create_auth_dependencies_from_keycloak
-from pkg_auth.integrations.fastapi.decorators import FastAPIDecorators
+from pkg_auth.integrations.fastapi import create_fastapi_auth
 from app.config import settings  # your own config
 
-auth_core = create_auth_dependencies_from_keycloak(
+fastapi_auth = create_fastapi_auth(
     keycloak_base_url=settings.KEYCLOAK_BASE_URL,
     realm=settings.KEYCLOAK_REALM,
     client_id=settings.KEYCLOAK_CLIENT_ID,
 )
 
 # Optional: override cookie name if you use a different one
-auth_decorators = FastAPIDecorators(
-    auth=auth_core,
-    cookie_name="access_token",  # default
-)
+auth_decorators = fastapi_auth.decorators(cookie_name="access_token")
 
 # app/routes.py
 
