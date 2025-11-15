@@ -1,19 +1,19 @@
 # pkg-auth
 
-[![Build Status](https://img.shields.io/actions/workflow/status/OWNER/REPO/ci.yml?branch=main&style=for-the-badge)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![Build Status](https://img.shields.io/actions/workflow/status/itqadem-apps/pkg_auth/ci.yml?branch=main&style=for-the-badge)](https://github.com/itqadem-apps/pkg_auth/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/pkg-auth?style=for-the-badge)](https://pypi.org/project/pkg-auth/)
-[![codecov](https://img.shields.io/codecov/c/github/OWNER/REPO?style=for-the-badge)](https://codecov.io/gh/OWNER/REPO)
+[![codecov](https://img.shields.io/codecov/c/github/itqadem-apps/pkg_auth?style=for-the-badge)](https://codecov.io/gh/itqadem-apps/pkg_auth)
 
 Clean-architecture auth core for multiple Python frameworks. This package provides a framework-agnostic auth facade plus first‑class integrations for FastAPI and Strawberry GraphQL.
 
 ## Documentation
 
-For detailed documentation, please visit the [GitHub Wiki](https://github.com/OWNER/REPO/wiki).
+For detailed documentation, please visit the [GitHub Wiki](https://github.com/itqadem-apps/pkg_auth/wiki).
 
-- [Installation](https://github.com/OWNER/REPO/wiki/Installation)
-- [User Guide](https://github.com/OWNER/REPO/wiki/User-Guide)
-- [FastAPI Integration](https://github.com/OWNER/REPO/wiki/FastAPI-Integration)
-- [Strawberry GraphQL Integration](https://github.com/OWNER/REPO/wiki/Strawberry-GraphQL-Integration)
+- [Installation](https://github.com/itqadem-apps/pkg_auth/wiki/Installation)
+- [User Guide](https://github.com/itqadem-apps/pkg_auth/wiki/User-Guide)
+- [FastAPI Integration](https://github.com/itqadem-apps/pkg_auth/wiki/FastAPI-Integration)
+- [Strawberry GraphQL Integration](https://github.com/itqadem-apps/pkg_auth/wiki/Strawberry-GraphQL-Integration)
 
 ## Quickstart
 
