@@ -5,7 +5,7 @@ import os
 from typing import Optional, Any
 
 from .settings import KCAdminSettings
-from . import provision_keycloak_client
+from .provision_client import provision_keycloak_client
 
 
 def settings_from_env() -> KCAdminSettings:

@@ -3,7 +3,6 @@ name: Wiki Content Sync
 on:
   push:
     branches:
-      - master
       - main
     paths:
       - "docs/**"
