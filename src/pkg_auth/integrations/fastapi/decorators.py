@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, TypeVar, ParamSpec
@@ -174,12 +175,24 @@ class FastAPIDecorators:
         Injects `current_user: AccessContext` into kwargs.
         """
 
+        signature = inspect.signature(func)
+        expects_current_user = "current_user" in signature.parameters
+        if expects_current_user:
+            params = [
+                param for param in signature.parameters.values()
+                if param.name != "current_user"
+            ]
+            wrapped_signature = signature.replace(parameters=params)
+        else:
+            wrapped_signature = signature
+
         @wraps(func)
         async def async_impl(*args: P.args, **kwargs: P.kwargs) -> Any:
             request = self._extract_request(args, kwargs)
             token = self._get_token(request)
             ctx = self.auth.authenticate(token)
-            kwargs.setdefault("current_user", ctx)
+            if expects_current_user:
+                kwargs.setdefault("current_user", ctx)
             return await func(*args, **kwargs)  # type: ignore[misc]
 
         @wraps(func)
@@ -187,10 +200,12 @@ class FastAPIDecorators:
             request = self._extract_request(args, kwargs)
             token = self._get_token(request)
             ctx = self.auth.authenticate(token)
-            kwargs.setdefault("current_user", ctx)
+            if expects_current_user:
+                kwargs.setdefault("current_user", ctx)
             return func(*args, **kwargs)
 
         wrapper = async_impl if asyncio.iscoroutinefunction(func) else sync_impl
+        wrapper.__signature__ = wrapped_signature  # type: ignore[attr-defined]
         return self._handle_auth_exceptions(wrapper)
 
     def optional_auth(self, func: Callable[P, R]) -> Callable[P, Any]:
@@ -199,6 +214,17 @@ class FastAPIDecorators:
 
         Injects `current_user: AccessContext | None` into kwargs.
         """
+
+        signature = inspect.signature(func)
+        expects_current_user = "current_user" in signature.parameters
+        if expects_current_user:
+            params = [
+                param for param in signature.parameters.values()
+                if param.name != "current_user"
+            ]
+            wrapped_signature = signature.replace(parameters=params)
+        else:
+            wrapped_signature = signature
 
         @wraps(func)
         async def async_impl(*args: P.args, **kwargs: P.kwargs) -> Any:
@@ -215,7 +241,8 @@ class FastAPIDecorators:
             except (AuthenticationError, InvalidTokenError, TokenExpiredError):
                 ctx = None
 
-            kwargs.setdefault("current_user", ctx)
+            if expects_current_user:
+                kwargs.setdefault("current_user", ctx)
             return await func(*args, **kwargs)  # type: ignore[misc]
 
         @wraps(func)
@@ -232,10 +259,12 @@ class FastAPIDecorators:
             except (AuthenticationError, InvalidTokenError, TokenExpiredError):
                 ctx = None
 
-            kwargs.setdefault("current_user", ctx)
+            if expects_current_user:
+                kwargs.setdefault("current_user", ctx)
             return func(*args, **kwargs)
 
         wrapper = async_impl if asyncio.iscoroutinefunction(func) else sync_impl
+        wrapper.__signature__ = wrapped_signature  # type: ignore[attr-defined]
         return self._handle_auth_exceptions(wrapper)
 
     def require_permissions(self, *permissions: str):
@@ -246,6 +275,17 @@ class FastAPIDecorators:
         """
 
         def decorator(func: Callable[P, R]) -> Callable[P, Any]:
+            signature = inspect.signature(func)
+            expects_current_user = "current_user" in signature.parameters
+            if expects_current_user:
+                params = [
+                    param for param in signature.parameters.values()
+                    if param.name != "current_user"
+                ]
+                wrapped_signature = signature.replace(parameters=params)
+            else:
+                wrapped_signature = signature
+
             @wraps(func)
             async def async_impl(*args: P.args, **kwargs: P.kwargs) -> Any:
                 request = self._extract_request(args, kwargs)
@@ -255,7 +295,8 @@ class FastAPIDecorators:
                 requirement = self.auth.require_permissions(any_of=permissions)
                 self.auth.authorize(ctx, [requirement])
 
-                kwargs.setdefault("current_user", ctx)
+                if expects_current_user:
+                    kwargs.setdefault("current_user", ctx)
                 return await func(*args, **kwargs)  # type: ignore[misc]
 
             @wraps(func)
@@ -267,10 +308,12 @@ class FastAPIDecorators:
                 requirement = self.auth.require_permissions(any_of=permissions)
                 self.auth.authorize(ctx, [requirement])
 
-                kwargs.setdefault("current_user", ctx)
+                if expects_current_user:
+                    kwargs.setdefault("current_user", ctx)
                 return func(*args, **kwargs)
 
             wrapper = async_impl if asyncio.iscoroutinefunction(func) else sync_impl
+            wrapper.__signature__ = wrapped_signature  # type: ignore[attr-defined]
             return self._handle_auth_exceptions(wrapper)
 
         return decorator
@@ -283,6 +326,17 @@ class FastAPIDecorators:
         """
 
         def decorator(func: Callable[P, R]) -> Callable[P, Any]:
+            signature = inspect.signature(func)
+            expects_current_user = "current_user" in signature.parameters
+            if expects_current_user:
+                params = [
+                    param for param in signature.parameters.values()
+                    if param.name != "current_user"
+                ]
+                wrapped_signature = signature.replace(parameters=params)
+            else:
+                wrapped_signature = signature
+
             @wraps(func)
             async def async_impl(*args: P.args, **kwargs: P.kwargs) -> Any:
                 request = self._extract_request(args, kwargs)
@@ -292,7 +346,8 @@ class FastAPIDecorators:
                 requirement = self.auth.require_realm_roles(any_of=roles)
                 self.auth.authorize(ctx, [requirement])
 
-                kwargs.setdefault("current_user", ctx)
+                if expects_current_user:
+                    kwargs.setdefault("current_user", ctx)
                 return await func(*args, **kwargs)  # type: ignore[misc]
 
             @wraps(func)
@@ -304,10 +359,12 @@ class FastAPIDecorators:
                 requirement = self.auth.require_realm_roles(any_of=roles)
                 self.auth.authorize(ctx, [requirement])
 
-                kwargs.setdefault("current_user", ctx)
+                if expects_current_user:
+                    kwargs.setdefault("current_user", ctx)
                 return func(*args, **kwargs)
 
             wrapper = async_impl if asyncio.iscoroutinefunction(func) else sync_impl
+            wrapper.__signature__ = wrapped_signature  # type: ignore[attr-defined]
             return self._handle_auth_exceptions(wrapper)
 
         return decorator
@@ -320,6 +377,17 @@ class FastAPIDecorators:
         """
 
         def decorator(func: Callable[P, R]) -> Callable[P, Any]:
+            signature = inspect.signature(func)
+            expects_current_user = "current_user" in signature.parameters
+            if expects_current_user:
+                params = [
+                    param for param in signature.parameters.values()
+                    if param.name != "current_user"
+                ]
+                wrapped_signature = signature.replace(parameters=params)
+            else:
+                wrapped_signature = signature
+
             @wraps(func)
             async def async_impl(*args: P.args, **kwargs: P.kwargs) -> Any:
                 request = self._extract_request(args, kwargs)
@@ -329,7 +397,8 @@ class FastAPIDecorators:
                 requirement = self.auth.require_client_roles(any_of=roles)
                 self.auth.authorize(ctx, [requirement])
 
-                kwargs.setdefault("current_user", ctx)
+                if expects_current_user:
+                    kwargs.setdefault("current_user", ctx)
                 return await func(*args, **kwargs)  # type: ignore[misc]
 
             @wraps(func)
@@ -341,10 +410,12 @@ class FastAPIDecorators:
                 requirement = self.auth.require_client_roles(any_of=roles)
                 self.auth.authorize(ctx, [requirement])
 
-                kwargs.setdefault("current_user", ctx)
+                if expects_current_user:
+                    kwargs.setdefault("current_user", ctx)
                 return func(*args, **kwargs)
 
             wrapper = async_impl if asyncio.iscoroutinefunction(func) else sync_impl
+            wrapper.__signature__ = wrapped_signature  # type: ignore[attr-defined]
             return self._handle_auth_exceptions(wrapper)
 
         return decorator
