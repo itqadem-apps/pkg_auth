@@ -47,5 +47,8 @@ all = [
 [project.urls]
 Homepage = "https://github.com/itqadem-apps/pkg_auth"
 
+[project.scripts]
+keycloak-init-client = "pkg_auth.admin.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
