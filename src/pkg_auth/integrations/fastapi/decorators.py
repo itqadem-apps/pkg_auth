@@ -9,7 +9,6 @@ from typing import Any, Callable, TypeVar, ParamSpec
 from fastapi import HTTPException, status
 from starlette.requests import Request
 
-from ...domain.entities import AccessContext
 from ...domain.exceptions import (
     TokenExpiredError,
     InvalidTokenError,
