@@ -9,7 +9,7 @@ import sys
 from typing import Any, Sequence
 
 from .env import settings_from_env
-from . import provision_keycloak_client
+from .provision_client import provision_keycloak_client
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

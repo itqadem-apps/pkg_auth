@@ -1,0 +1,86 @@
+name: Wiki Content Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+  repository_dispatch:
+    types: [docs]
+  workflow_dispatch:
+  gollum:
+
+jobs:
+  sync-to-wiki:
+    name: Sync docs -> Wiki
+    if: github.event_name != 'gollum'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clone wiki repository
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
+
+      - name: Copy docs to wiki
+        run: |
+          set -euo pipefail
+          # Remove everything in wiki except the .git directory
+          find wiki -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          # Copy docs content into wiki
+          cp -a docs/. wiki/
+
+      - name: Commit and push changes to wiki
+        run: |
+          set -euo pipefail
+          cd wiki
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .
+            git commit -m "docs: sync to wiki from repo ${GITHUB_SHA::7}"
+            git push origin HEAD
+          else
+            echo "No changes to commit to wiki"
+          fi
+
+  sync-from-wiki:
+    name: Sync Wiki -> docs (PR)
+    if: github.event_name == 'gollum'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Clone wiki repository
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" wiki
+
+      - name: Sync wiki content into docs
+        run: |
+          set -euo pipefail
+          mkdir -p docs
+          # Remove current docs content and replace with wiki content
+          find docs -mindepth 1 -maxdepth 1 -exec rm -rf {} + || true
+          cp -a wiki/. docs/
+          # Keep only documentation files in docs (remove wiki .git if copied by mistake)
+          rm -rf docs/.git || true
+
+      - name: Create pull request with changes
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "docs: sync from wiki (${{ github.sha }})"
+          title: "docs: Sync from Wiki"
+          body: |
+            Automated PR to sync documentation from the GitHub Wiki (triggered by gollum event).
+          branch: chore/sync-wiki-${{ github.run_id }}
+          delete-branch: true
