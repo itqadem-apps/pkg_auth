@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional, Sequence, Type
+from typing import Any, Iterable, Mapping, Optional, Sequence, Type
 
 from graphql import GraphQLError
-from starlette.requests import Request
 from strawberry.permission import BasePermission
 from strawberry.types import Info
 
@@ -29,7 +28,7 @@ class StrawberryAuthContext:
 
     You can use this directly, or extend it in your app by adding more fields.
     """
-    request: Request
+    request: Any
     user: Optional[AccessContext] = None
     extra: Any = None  # host app can put UoW, services, etc. here if desired
 
@@ -38,8 +37,34 @@ class StrawberryAuthContext:
 # Helper: token extraction (header + cookie)
 # --------------------------------------------------------------------- #
 
+def _get_header(request: Any, name: str) -> str | None:
+    headers = getattr(request, "headers", None)
+    if headers is not None:
+        try:
+            return headers.get(name)
+        except Exception:
+            pass
+
+    meta = getattr(request, "META", None)
+    if meta is not None:
+        key = "HTTP_" + name.upper().replace("-", "_")
+        return meta.get(key)
+
+    return None
+
+
+def _get_cookies(request: Any) -> Mapping[str, str]:
+    cookies = getattr(request, "cookies", None)
+    if cookies is not None:
+        return cookies
+    cookies = getattr(request, "COOKIES", None)
+    if cookies is not None:
+        return cookies
+    return {}
+
+
 def _extract_token_from_request(
-    request: Request,
+    request: Any,
     cookie_name: str,
 ) -> Optional[str]:
     """
@@ -52,14 +77,14 @@ def _extract_token_from_request(
         token string or None if not found.
     """
     # 1) Authorization header
-    auth_header = request.headers.get("Authorization")
+    auth_header = _get_header(request, "Authorization")
     if auth_header and auth_header.startswith("Bearer "):
         token = auth_header.removeprefix("Bearer ").strip()
         if token:
             return token
 
     # 2) Cookie
-    cookie_token = request.cookies.get(cookie_name)
+    cookie_token = _get_cookies(request).get(cookie_name)
     if cookie_token:
         return cookie_token
 
@@ -100,9 +125,7 @@ class StrawberryAuth:
         extra_factory: Optional[callable] = None,
     ):
         """
-        Build an async function compatible with:
-
-            strawberry.fastapi.GraphQLRouter(context_getter=...)
+        Build an async context getter compatible with Strawberry ASGI/FastAPI integrations.
 
         Args:
             optional:
@@ -113,37 +136,73 @@ class StrawberryAuth:
                 - Whatever it returns will be stored on context.extra
 
         Returns:
-            async function(request: Request) -> StrawberryAuthContext
+            async function(request) -> StrawberryAuthContext
         """
 
-        async def _context_getter(request: Request) -> StrawberryAuthContext:
-            token = _extract_token_from_request(request, self.cookie_name)
-
-            if not token:
-                # No token at all
-                if optional:
-                    extra = extra_factory(request, None) if extra_factory else None
-                    return StrawberryAuthContext(request=request, user=None, extra=extra)
-                raise GraphQLError("Not authenticated")
-
-            # There *is* a token -> try to authenticate
-            try:
-                user = self.auth.authenticate(token)
-            except TokenExpiredError:
-                if optional:
-                    extra = extra_factory(request, None) if extra_factory else None
-                    return StrawberryAuthContext(request=request, user=None, extra=extra)
-                raise GraphQLError("Token expired")
-            except (InvalidTokenError, AuthenticationError) as exc:
-                if optional:
-                    extra = extra_factory(request, None) if extra_factory else None
-                    return StrawberryAuthContext(request=request, user=None, extra=extra)
-                raise GraphQLError(str(exc))
-
-            extra = extra_factory(request, user) if extra_factory else None
-            return StrawberryAuthContext(request=request, user=user, extra=extra)
+        async def _context_getter(request: Any) -> StrawberryAuthContext:
+            return self._build_context(
+                request=request,
+                optional=optional,
+                extra_factory=extra_factory,
+            )
 
         return _context_getter
+
+    def make_django_context_getter(
+        self,
+        *,
+        optional: bool = True,
+        extra_factory: Optional[callable] = None,
+    ):
+        """
+        Build a sync context getter compatible with Strawberry Django views.
+
+        Use it from a `strawberry.django.views.GraphQLView` / `AsyncGraphQLView`
+        by overriding `get_context`.
+
+        Returns:
+            function(request, response=None) -> StrawberryAuthContext
+        """
+
+        def _context_getter(request: Any, response: Any = None) -> StrawberryAuthContext:
+            return self._build_context(
+                request=request,
+                optional=optional,
+                extra_factory=extra_factory,
+            )
+
+        return _context_getter
+
+    def _build_context(
+        self,
+        *,
+        request: Any,
+        optional: bool,
+        extra_factory: Optional[callable],
+    ) -> StrawberryAuthContext:
+        token = _extract_token_from_request(request, self.cookie_name)
+
+        if not token:
+            if optional:
+                extra = extra_factory(request, None) if extra_factory else None
+                return StrawberryAuthContext(request=request, user=None, extra=extra)
+            raise GraphQLError("Not authenticated")
+
+        try:
+            user = self.auth.authenticate(token)
+        except TokenExpiredError:
+            if optional:
+                extra = extra_factory(request, None) if extra_factory else None
+                return StrawberryAuthContext(request=request, user=None, extra=extra)
+            raise GraphQLError("Token expired")
+        except (InvalidTokenError, AuthenticationError) as exc:
+            if optional:
+                extra = extra_factory(request, None) if extra_factory else None
+                return StrawberryAuthContext(request=request, user=None, extra=extra)
+            raise GraphQLError(str(exc))
+
+        extra = extra_factory(request, user) if extra_factory else None
+        return StrawberryAuthContext(request=request, user=user, extra=extra)
 
     # ----------------------------------------------------------------- #
     # Permission helpers

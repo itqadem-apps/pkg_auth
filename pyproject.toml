@@ -17,7 +17,7 @@ authors = [
 # Runtime dependencies
 dependencies = [
     "httpx>=0.28.1",
-    "pyjwt>=2.10.1",
+    "pyjwt[crypto]>=2.10.1",
     "requests>=2.32.3",
 ]
 
@@ -27,6 +27,10 @@ dev = [
     "mypy>=1.11.0,<2.0.0",
     "types-requests>=2.32.0.0,<3.0.0.0",
     "types-PyJWT>=1.7.0,<2.0.0",
+]
+
+django = [
+    "django>=6.0",
 ]
 
 fastapi = [
@@ -39,6 +43,7 @@ strawberry = [
 ]
 
 all = [
+    "django>=6.0",
     "fastapi>=0.115",
     "starlette>=0.37",
     "strawberry-graphql>=0.255",

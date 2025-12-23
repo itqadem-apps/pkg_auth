@@ -13,6 +13,7 @@ For detailed documentation, please visit the [GitHub Wiki](https://github.com/it
 - [Installation](https://github.com/itqadem-apps/pkg_auth/wiki/Installation)
 - [User Guide](https://github.com/itqadem-apps/pkg_auth/wiki/User-Guide)
 - [FastAPI Integration](https://github.com/itqadem-apps/pkg_auth/wiki/FastAPI-Integration)
+- [Django Integration](https://github.com/itqadem-apps/pkg_auth/wiki/Django-Integration)
 - [Strawberry GraphQL Integration](https://github.com/itqadem-apps/pkg_auth/wiki/Strawberry-GraphQL-Integration)
 
 ## Quickstart

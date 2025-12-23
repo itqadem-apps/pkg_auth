@@ -5,7 +5,7 @@ Clean-architecture authentication core that can be integrated with
 multiple frameworks (FastAPI, Django, etc.).
 """
 
-__version__ = "0.1.0"
+__version__ = "0.15.0"
 
 from .domain.entities import AccessContext, IdentityInfo, SessionInfo, AccessRights
 from .domain.constants import ClaimSet
