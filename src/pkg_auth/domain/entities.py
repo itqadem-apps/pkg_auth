@@ -113,4 +113,4 @@ class AccessContext:
 
     @property
     def realm(self) -> Optional[str]:
-        return self.session.realm
+        return str(self.session.realm) if self.session.realm else None
