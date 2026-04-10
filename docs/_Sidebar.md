@@ -2,5 +2,6 @@
 - [Installation](Installation)
 - [User Guide](User-Guide)
 - [FastAPI Integration](FastAPI-Integration)
+- [Django Integration](Django-Integration)
 - [Strawberry GraphQL Integration](Strawberry-GraphQL-Integration)
 - [Keycloak Admin](Keycloak-Admin)

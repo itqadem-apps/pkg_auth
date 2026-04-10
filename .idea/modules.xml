@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/../itq_assessments/itq_assessments/.idea/itq_assessments.iml" filepath="$PROJECT_DIR$/../itq_assessments/itq_assessments/.idea/itq_assessments.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/pkg_auth.iml" filepath="$PROJECT_DIR$/.idea/pkg_auth.iml" />
     </modules>
   </component>

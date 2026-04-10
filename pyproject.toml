@@ -17,7 +17,7 @@ authors = [
 # Runtime dependencies
 dependencies = [
     "httpx>=0.28.1",
-    "pyjwt>=2.10.1",
+    "pyjwt[crypto]>=2.10.1",
     "requests>=2.32.3",
 ]
 
@@ -61,6 +61,7 @@ strawberry = [
 
 # Convenience meta-extra
 all = [
+    "django>=6.0",
     "fastapi>=0.115",
     "starlette>=0.37",
     "django>=4.2",
