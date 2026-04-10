@@ -1,4 +1,6 @@
-# Keycloak Admin Provisioning (pkg_auth.keycloak_admin)
+# Keycloak Admin Provisioning (pkg_auth.admin)
+
+> **v1.0 note:** `--strict-roles` is now optional. When the authorization module (`pkg_auth.authorization`) is in use, per-organization role enforcement is handled by the ACL database rather than by Keycloak client roles. Services that derive authorization from `AuthContext` should omit `--strict-roles`. The Keycloak admin client remains useful for **user provisioning** (creating service accounts, managing invitation flows) and **service-account setup** (client creation, audience configuration).
 
 This document explains how to use the **Keycloak admin helper** that lives inside the
 `pkg_auth.keycloak_admin` package:

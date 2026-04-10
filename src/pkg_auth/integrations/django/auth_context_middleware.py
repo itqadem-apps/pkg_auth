@@ -1,0 +1,77 @@
+"""AuthContextMiddleware — reads X-Organization-Id, attaches ``request.auth_context``."""
+from __future__ import annotations
+
+from typing import Awaitable, Callable
+
+from asgiref.sync import iscoroutinefunction
+from django.http import HttpRequest, HttpResponse, JsonResponse
+
+from ...authorization import NotAMember, OrgId, UnknownOrganization
+from .install import get_registry
+
+
+class AuthContextMiddleware:
+    """Resolve and attach ``request.auth_context`` for protected routes.
+
+    Requires ``IdentityMiddleware`` to run first so ``request.identity``
+    is populated. Behavior:
+
+        - no header → ``request.auth_context = None`` (route decides)
+        - identity is None and header present → 401
+        - org not found → 404
+        - user not a member → 403
+    """
+
+    sync_capable = False
+    async_capable = True
+
+    def __init__(
+        self,
+        get_response: Callable[[HttpRequest], Awaitable[HttpResponse]],
+    ) -> None:
+        self.get_response = get_response
+        if not iscoroutinefunction(get_response):
+            raise RuntimeError(
+                "AuthContextMiddleware requires async middleware chain "
+                "(use ASGI / runserver)."
+            )
+
+    async def __call__(self, request: HttpRequest) -> HttpResponse:
+        registry = get_registry()
+        request.auth_context = None  # type: ignore[attr-defined]
+
+        raw = request.headers.get(registry.header_name)
+        if raw is None:
+            return await self.get_response(request)
+
+        identity = getattr(request, "identity", None)
+        if identity is None:
+            return JsonResponse(
+                {"detail": "Not authenticated"}, status=401,
+            )
+
+        user = await registry.sync_user.execute(
+            sub=identity.subject_str,
+            email=identity.email_str or "",
+            full_name=identity.full_name,
+        )
+
+        if raw.isdigit():
+            org = await registry.organization_repo.get(OrgId(int(raw)))
+        else:
+            org = await registry.organization_repo.get_by_slug(raw)
+        if org is None:
+            return JsonResponse(
+                {"detail": f"Organization {raw!r} not found"}, status=404,
+            )
+
+        try:
+            request.auth_context = await registry.resolve_auth.execute(  # type: ignore[attr-defined]
+                user.id, org.id,
+            )
+        except NotAMember as exc:
+            return JsonResponse({"detail": str(exc)}, status=403)
+        except UnknownOrganization as exc:
+            return JsonResponse({"detail": str(exc)}, status=404)
+
+        return await self.get_response(request)

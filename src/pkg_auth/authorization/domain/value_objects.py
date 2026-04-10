@@ -1,0 +1,112 @@
+"""Authorization value objects (typed wrappers around DB IDs and string keys)."""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+# Format:
+#   - one or more colon-separated segments
+#   - each segment must start with a lowercase letter
+#   - each segment may contain lowercase letters, digits, ``_``, ``-``
+#   - at least one colon (so single bare words like ``"admin"`` are rejected)
+#
+# Examples (valid):   "course:edit", "media-library:upload", "billing:invoice:refund"
+# Examples (invalid): "admin", "Course:edit", ":x", "x:", "1course:edit"
+_PERMISSION_KEY_PATTERN = re.compile(
+    r"^[a-z][a-z0-9_-]*(?::[a-z][a-z0-9_-]*)+$"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class UserId:
+    """Local primary key of a row in the ``acl.users`` table.
+
+    Wraps the BIGINT id; *not* the Keycloak ``sub``. The mapping from
+    ``sub`` to ``UserId`` is established by ``SyncUserFromJwtUseCase``.
+    """
+
+    value: int
+
+    def __int__(self) -> int:
+        return self.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class OrgId:
+    """Local primary key of a row in the ``acl.organizations`` table."""
+
+    value: int
+
+    def __int__(self) -> int:
+        return self.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class RoleId:
+    """Local primary key of a row in the ``acl.roles`` table."""
+
+    value: int
+
+    def __int__(self) -> int:
+        return self.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class PermissionId:
+    """Local primary key of a row in the ``acl.permissions`` table."""
+
+    value: int
+
+    def __int__(self) -> int:
+        return self.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+@dataclass(frozen=True, slots=True)
+class RoleName:
+    """Human-readable role name. Unique per ``(organization_id, name)``."""
+
+    value: str
+
+    def __str__(self) -> str:
+        return self.value
+
+
+@dataclass(frozen=True, slots=True)
+class PermissionKey:
+    """A permission key like ``"course:edit"`` or ``"billing:invoice:refund"``.
+
+    Format (validated in ``__post_init__``):
+
+        - one or more colon-separated segments
+        - each segment must start with a lowercase letter
+        - each segment may contain lowercase letters, digits, ``_``, ``-``
+        - at least one colon (so single bare words like ``"admin"`` are
+          rejected — they don't carry resource context)
+
+    Raises:
+        ValueError: when the value does not match the format.
+    """
+
+    value: str
+
+    def __post_init__(self) -> None:
+        if not _PERMISSION_KEY_PATTERN.match(self.value):
+            raise ValueError(
+                f"Invalid permission key {self.value!r}: "
+                f"must be 'resource:action' (lowercase, colon-separated)"
+            )
+
+    def __str__(self) -> str:
+        return self.value

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "itqadem-courses-app"
+version = "0.1.0"
+description = "Reference itqadem service demonstrating pkg_auth v1.0 wiring"
+requires-python = ">=3.10"
+
+dependencies = [
+    "pkg-auth[acl-sqlalchemy,fastapi]",
+    "uvicorn>=0.30",
+]
+
+[tool.setuptools.packages.find]
+include = ["courses_app*"]

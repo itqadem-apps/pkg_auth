@@ -1,36 +1,26 @@
+"""FastAPI integration for pkg_auth (identity + ACL)."""
 from __future__ import annotations
 
-from .decorators import FastAPIDecorators
-from .deps import FastAPIAuthorization
-from ..common.auth_factory import create_auth_dependencies_from_keycloak, AuthDependencies
+try:
+    import fastapi  # noqa: F401
+except ImportError as exc:  # pragma: no cover
+    raise ImportError(
+        "pkg_auth.integrations.fastapi requires fastapi. "
+        "Install with: pip install pkg-auth[fastapi]"
+    ) from exc
 
+from .auth_factory import Authentication, create_authentication
+from .auth_context_dep import make_get_auth_context
+from .decorators import require_permission
+from .errors import install_exception_handlers
+from .identity_dep import bearer_scheme, extract_token_from_request
 
-def create_fastapi_auth(
-    *,
-    keycloak_base_url: str,
-    realm: str,
-    client_id: str,
-    audience: str | None = None,
-) -> FastAPIAuthorization:
-    """
-    High-level helper for FastAPI apps:
-
-    - Creates AuthDependencies from Keycloak config
-    - Wraps them in FastAPIAuthorization, exposing dependencies like:
-
-        fastapi_auth.get_current_user
-        fastapi_auth.get_optional_user
-        fastapi_auth.require_permissions(...)
-        fastapi_auth.require_realm_roles(...)
-        fastapi_auth.require_client_roles(...)
-    """
-    auth: AuthDependencies = create_auth_dependencies_from_keycloak(
-        keycloak_base_url=keycloak_base_url,
-        realm=realm,
-        client_id=client_id,
-        audience=audience,
-    )
-    return FastAPIAuthorization(auth=auth)
-
-
-__all__ = ["FastAPIAuthorization", "FastAPIDecorators", "create_fastapi_auth"]
+__all__ = [
+    "Authentication",
+    "create_authentication",
+    "make_get_auth_context",
+    "require_permission",
+    "install_exception_handlers",
+    "bearer_scheme",
+    "extract_token_from_request",
+]

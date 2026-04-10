@@ -1,39 +1,97 @@
 # pkg-auth
 
-[![Build Status](https://img.shields.io/actions/workflow/status/itqadem-apps/pkg_auth/ci.yml?branch=main&style=for-the-badge)](https://github.com/itqadem-apps/pkg_auth/actions/workflows/ci.yml)
-[![PyPI version](https://img.shields.io/pypi/v/pkg-auth?style=for-the-badge)](https://pypi.org/project/pkg-auth/)
-[![codecov](https://img.shields.io/codecov/c/github/itqadem-apps/pkg_auth?style=for-the-badge)](https://codecov.io/gh/itqadem-apps/pkg_auth)
+Clean-architecture **identity + ACL** for multi-framework Python services. Handles JWT authentication (via Keycloak) and database-backed authorization (users, organizations, roles, permissions, memberships) in a single package with first-class support for **FastAPI**, **Django**, and **Strawberry GraphQL**.
 
-Clean-architecture auth core for multiple Python frameworks. This package provides a framework-agnostic auth facade plus first‑class integrations for FastAPI and Strawberry GraphQL.
+> **v1.0 is a breaking change from v0.x.** The old claim-based authorization model (`AccessContext`, `AccessRights`, `require_permissions`) is replaced by a real ACL database. See [`docs/MIGRATION_v1.md`](docs/MIGRATION_v1.md) for the upgrade guide.
+
+## Install
+
+```bash
+# Core (identity only — no DB deps)
+pip install pkg-auth
+
+# With ACL + FastAPI (most common for itqadem services)
+pip install pkg-auth[acl-sqlalchemy,fastapi]
+
+# With ACL + Django
+pip install pkg-auth[acl-django,django]
+
+# With optional Redis cache
+pip install pkg-auth[cache-redis]
+```
+
+## Quickstart (FastAPI)
+
+```python
+from fastapi import Depends, FastAPI
+from pkg_auth.authentication import IdentityContext
+from pkg_auth.authorization import AuthContext
+from pkg_auth.integrations.fastapi import (
+    create_authentication,
+    make_get_auth_context,
+    require_permission,
+)
+
+# --- Wire authentication + authorization ---
+
+auth = create_authentication(
+    keycloak_base_url="https://auth.example.com",
+    realm="itqadem",
+    audience="courses-service",
+)
+
+# (wire sync_user_use_case, resolve_use_case, organization_repo from your DI)
+get_auth_context = make_get_auth_context(
+    get_identity=auth.get_identity,
+    sync_user_use_case=sync_user,
+    resolve_use_case=resolve,
+    organization_repo=org_repo,
+)
+
+app = FastAPI()
+
+# --- Use in routes ---
+
+@app.get("/courses/{id}")
+async def get_course(
+    id: str,
+    bundle: tuple[IdentityContext, AuthContext] = Depends(
+        require_permission("course:view", get_auth_context=get_auth_context)
+    ),
+):
+    identity, auth_ctx = bundle
+    return {"course_id": id, "role": str(auth_ctx.role_name)}
+```
+
+See [`examples/itqadem_courses_app`](examples/itqadem_courses_app) for a complete working example.
+
+## Architecture
+
+```
+pkg_auth/
+  authentication/             JWT validation → IdentityContext (identity only)
+  authorization/              Full ACL (users, orgs, roles, perms, memberships)
+    domain/                   Pure entities, ports (Protocol), exceptions
+    application/use_cases/    Business logic (13 use cases)
+    adapters/
+      sqlalchemy/             Canonical schema + Alembic migration + repos
+      django_orm/             Mirror models (managed=False) + repos
+      cache/                  InMemoryTTLCache / RedisCache + decorator
+  integrations/
+    fastapi/                  Deps + require_permission + exception handlers
+    django/                   Middleware + decorators
+    strawberry/               Context getter + permission classes
+  admin/                      Keycloak admin client (user provisioning)
+```
+
+**Layering rules**: domain has zero external imports; application imports only domain; adapters import their framework; integrations import everything.
 
 ## Documentation
 
-For detailed documentation, please visit the [GitHub Wiki](https://github.com/itqadem-apps/pkg_auth/wiki).
-
-- [Installation](https://github.com/itqadem-apps/pkg_auth/wiki/Installation)
-- [User Guide](https://github.com/itqadem-apps/pkg_auth/wiki/User-Guide)
-- [FastAPI Integration](https://github.com/itqadem-apps/pkg_auth/wiki/FastAPI-Integration)
-- [Strawberry GraphQL Integration](https://github.com/itqadem-apps/pkg_auth/wiki/Strawberry-GraphQL-Integration)
-
-## Quickstart
-
-```python
-from pkg_auth.integrations.fastapi import create_fastapi_auth
-
-# Configure with your Keycloak instance
-fastapi_auth = create_fastapi_auth(
-    keycloak_base_url="http://localhost:8080",
-    realm="my-realm",
-    client_id="my-client",
-)
-
-# Use in your FastAPI routes
-from fastapi import APIRouter, Depends
-from pkg_auth import AccessContext
-
-router = APIRouter()
-
-@router.get("/me")
-async def me(current_user: AccessContext = Depends(fastapi_auth.get_current_user)):
-    return {"email": current_user.email}
-```
+- [Authorization model](docs/Authorization.md) — schema, permission catalog, roles, memberships
+- [Caching](docs/Caching.md) — InMemoryTTLCache, RedisCache, invalidation contract
+- [FastAPI Integration](docs/FastAPI.md)
+- [Django Integration](docs/Django.md)
+- [Strawberry Integration](docs/Strawberry.md)
+- [Keycloak Admin](docs/Keycloak-Admin.md)
+- [Migration from v0.x](docs/MIGRATION_v1.md)
