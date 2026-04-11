@@ -216,7 +216,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.UniqueConstraint(
-            "user_id", "organization_id", name="uq_memberships_user_org"
+            "user_id", "organization_id", "role_id", name="uq_memberships_user_org_role"
         ),
         schema="acl",
     )

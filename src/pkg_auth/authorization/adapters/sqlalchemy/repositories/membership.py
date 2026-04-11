@@ -102,6 +102,9 @@ class SqlAlchemyMembershipRepository:
     async def load_auth_context(
         self, user_id: UserId, org_id: OrgId
     ) -> AuthContext | None:
+        """Multi-role: fetch ALL active memberships for (user, org),
+        merge their roles' permissions into a single AuthContext.
+        """
         async with self.session_factory() as session:
             stmt = (
                 select(self.model)
@@ -116,14 +119,19 @@ class SqlAlchemyMembershipRepository:
                     self.model.status == "active",
                 )
             )
-            row = (await session.execute(stmt)).scalar_one_or_none()
-            if row is None:
+            rows = (await session.execute(stmt)).scalars().all()
+            if not rows:
                 return None
+            role_names: set[str] = set()
+            all_perms: set[str] = set()
+            for row in rows:
+                role_names.add(row.role.name)
+                all_perms.update(p.key for p in row.role.permissions)
             return AuthContext(
-                user_id=UserId(row.user_id),
-                organization_id=OrgId(row.organization_id),
-                role_name=RoleName(row.role.name),
-                perms=frozenset(p.key for p in row.role.permissions),
+                user_id=UserId(rows[0].user_id),
+                organization_id=OrgId(rows[0].organization_id),
+                role_names=frozenset(role_names),
+                perms=frozenset(all_perms),
             )
 
     async def list_for_user(self, user_id: UserId) -> list[Membership]:

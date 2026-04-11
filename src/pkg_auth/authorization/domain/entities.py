@@ -103,8 +103,8 @@ class AuthContext:
     """Hot-path authorization context for a (user, organization) request.
 
     Built once per request by ``ResolveAuthContextUseCase`` and passed
-    through to handlers. Carries only what the request actually needs
-    to make permission decisions: who, where, and what they can do.
+    through to handlers. A user can have **multiple roles** in an org;
+    ``perms`` is the **union** of all active roles' permissions.
 
     Frozen because handler code must not mutate the perms set after the
     dependency layer has built it.
@@ -112,11 +112,11 @@ class AuthContext:
 
     user_id: UserId
     organization_id: OrgId
-    role_name: RoleName
+    role_names: frozenset[str]
     perms: frozenset[str]
 
     def has(self, perm: str) -> bool:
-        """Return ``True`` if the active role grants ``perm`` in this org."""
+        """Return ``True`` if any of the user's roles grant ``perm``."""
         return perm in self.perms
 
     def require(self, perm: str) -> None:
@@ -129,5 +129,9 @@ class AuthContext:
         if perm not in self.perms:
             raise MissingPermission(
                 f"permission {perm!r} required on org {self.organization_id} "
-                f"(role {self.role_name})"
+                f"(roles {sorted(self.role_names)})"
             )
+
+    def has_role(self, role: str) -> bool:
+        """Return ``True`` if the user has the named role in this org."""
+        return role in self.role_names

@@ -28,7 +28,7 @@ def _serialize_auth_context(ctx: AuthContext) -> bytes:
     payload = {
         "user_id": str(ctx.user_id.value),
         "organization_id": str(ctx.organization_id.value),
-        "role_name": str(ctx.role_name),
+        "role_names": sorted(ctx.role_names),
         "perms": sorted(ctx.perms),
     }
     return json.dumps(payload).encode("utf-8")
@@ -39,7 +39,7 @@ def _deserialize_auth_context(blob: bytes) -> AuthContext:
     return AuthContext(
         user_id=UserId(UUID(payload["user_id"])),
         organization_id=OrgId(UUID(payload["organization_id"])),
-        role_name=RoleName(payload["role_name"]),
+        role_names=frozenset(payload["role_names"]),
         perms=frozenset(payload["perms"]),
     )
 
