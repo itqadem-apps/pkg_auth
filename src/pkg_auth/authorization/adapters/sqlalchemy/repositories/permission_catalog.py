@@ -1,8 +1,8 @@
-"""SQLAlchemy implementation of PermissionCatalogRepository."""
+"""SQLAlchemy implementation of PermissionCatalogRepository (UUID PKs, injectable model)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Sequence
+from dataclasses import dataclass, field
+from typing import Any, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ....domain.entities import Permission
 from ....domain.value_objects import PermissionId, PermissionKey
-from ..models import PermissionORM
+from ..models import PermissionORM as DefaultPermissionORM
 
 
-def _to_permission(row: PermissionORM) -> Permission:
+def _to_permission(row: Any) -> Permission:
     return Permission(
         id=PermissionId(row.id),
         key=PermissionKey(row.key),
@@ -25,6 +25,7 @@ def _to_permission(row: PermissionORM) -> Permission:
 @dataclass(slots=True)
 class SqlAlchemyPermissionCatalogRepository:
     session_factory: async_sessionmaker[AsyncSession]
+    model: type = field(default=DefaultPermissionORM)
 
     async def register_many(
         self,
@@ -42,7 +43,7 @@ class SqlAlchemyPermissionCatalogRepository:
             }
             for key, description in entries
         ]
-        stmt = pg_insert(PermissionORM).values(rows)
+        stmt = pg_insert(self.model).values(rows)
         stmt = stmt.on_conflict_do_update(
             index_elements=["key"],
             set_={
@@ -57,7 +58,9 @@ class SqlAlchemyPermissionCatalogRepository:
     async def list_all(self) -> list[Permission]:
         async with self.session_factory() as session:
             rows = (
-                await session.execute(select(PermissionORM).order_by(PermissionORM.id))
+                await session.execute(
+                    select(self.model).order_by(self.model.id)
+                )
             ).scalars().all()
             return [_to_permission(r) for r in rows]
 
@@ -65,9 +68,9 @@ class SqlAlchemyPermissionCatalogRepository:
         async with self.session_factory() as session:
             rows = (
                 await session.execute(
-                    select(PermissionORM)
-                    .where(PermissionORM.service_name == service_name)
-                    .order_by(PermissionORM.id)
+                    select(self.model)
+                    .where(self.model.service_name == service_name)
+                    .order_by(self.model.id)
                 )
             ).scalars().all()
             return [_to_permission(r) for r in rows]

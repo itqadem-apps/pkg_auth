@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from uuid import UUID
 
 from ...domain.entities import AuthContext, Membership
 from ...domain.ports import MembershipRepository
@@ -25,8 +26,8 @@ def _auth_context_key(user_id: UserId, org_id: OrgId) -> str:
 
 def _serialize_auth_context(ctx: AuthContext) -> bytes:
     payload = {
-        "user_id": int(ctx.user_id),
-        "organization_id": int(ctx.organization_id),
+        "user_id": str(ctx.user_id.value),
+        "organization_id": str(ctx.organization_id.value),
         "role_name": str(ctx.role_name),
         "perms": sorted(ctx.perms),
     }
@@ -36,8 +37,8 @@ def _serialize_auth_context(ctx: AuthContext) -> bytes:
 def _deserialize_auth_context(blob: bytes) -> AuthContext:
     payload = json.loads(blob.decode("utf-8"))
     return AuthContext(
-        user_id=UserId(payload["user_id"]),
-        organization_id=OrgId(payload["organization_id"]),
+        user_id=UserId(UUID(payload["user_id"])),
+        organization_id=OrgId(UUID(payload["organization_id"])),
         role_name=RoleName(payload["role_name"]),
         perms=frozenset(payload["perms"]),
     )

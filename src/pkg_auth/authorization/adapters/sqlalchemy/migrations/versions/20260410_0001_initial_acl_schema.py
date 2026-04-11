@@ -35,7 +35,7 @@ def upgrade() -> None:
     # ----- users ---------------------------------------------------------- #
     op.create_table(
         "users",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("keycloak_sub", sa.String(64), nullable=False),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column("full_name", sa.String(255), nullable=True),
@@ -74,7 +74,7 @@ def upgrade() -> None:
     # ----- organizations -------------------------------------------------- #
     op.create_table(
         "organizations",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("slug", sa.String(255), nullable=False),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column(
@@ -99,7 +99,7 @@ def upgrade() -> None:
     # ----- permissions ---------------------------------------------------- #
     op.create_table(
         "permissions",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column("key", sa.String(255), nullable=False),
         sa.Column("service_name", sa.String(64), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
@@ -123,10 +123,10 @@ def upgrade() -> None:
     # ----- roles ---------------------------------------------------------- #
     op.create_table(
         "roles",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column(
             "organization_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.organizations.id", ondelete="CASCADE"),
             nullable=True,
         ),
@@ -156,13 +156,13 @@ def upgrade() -> None:
         "role_permissions",
         sa.Column(
             "role_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.roles.id", ondelete="CASCADE"),
             primary_key=True,
         ),
         sa.Column(
             "permission_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.permissions.id", ondelete="CASCADE"),
             primary_key=True,
         ),
@@ -172,22 +172,22 @@ def upgrade() -> None:
     # ----- memberships --------------------------------------------------- #
     op.create_table(
         "memberships",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column(
             "user_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.users.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(
             "organization_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.organizations.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column(
             "role_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.roles.id", ondelete="RESTRICT"),
             nullable=False,
         ),
@@ -236,24 +236,24 @@ def upgrade() -> None:
     # ----- membership_invitations ---------------------------------------- #
     op.create_table(
         "membership_invitations",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column(
             "organization_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.organizations.id", ondelete="CASCADE"),
             nullable=False,
         ),
         sa.Column("email", sa.String(255), nullable=False),
         sa.Column(
             "role_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.roles.id", ondelete="RESTRICT"),
             nullable=False,
         ),
         sa.Column("token", sa.String(64), nullable=False),
         sa.Column(
             "invited_by_user_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.users.id", ondelete="SET NULL"),
             nullable=True,
         ),
@@ -278,10 +278,10 @@ def upgrade() -> None:
     # ----- auth_audit_log ------------------------------------------------ #
     op.create_table(
         "auth_audit_log",
-        sa.Column("id", sa.BigInteger(), primary_key=True),
+        sa.Column("id", sa.Uuid(as_uuid=True), primary_key=True),
         sa.Column(
             "actor_user_id",
-            sa.BigInteger(),
+            sa.Uuid(as_uuid=True),
             sa.ForeignKey("acl.users.id", ondelete="SET NULL"),
             nullable=True,
         ),

@@ -21,7 +21,14 @@ except ImportError as exc:  # pragma: no cover
 
 from pathlib import Path
 
-from .base import AclBase
+from .base import AclBase, create_acl_base
+from .mixins import (
+    MembershipMixin,
+    OrganizationMixin,
+    PermissionMixin,
+    RoleMixin,
+    UserMixin,
+)
 from .models import (
     AuthAuditLogORM,
     MembershipInvitationORM,
@@ -42,7 +49,14 @@ MIGRATIONS_DIR: str = str(Path(__file__).parent / "migrations" / "versions")
 
 __all__ = [
     "AclBase",
+    "create_acl_base",
     "MIGRATIONS_DIR",
+    # Mixins (for services that extend)
+    "UserMixin",
+    "OrganizationMixin",
+    "PermissionMixin",
+    "RoleMixin",
+    "MembershipMixin",
     # ORM models
     "UserORM",
     "OrganizationORM",

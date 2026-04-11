@@ -1,3 +1,4 @@
+from uuid import UUID, uuid4
 """In-memory fake repositories for application-layer unit tests.
 
 Each fake implements its corresponding Protocol with a dict-backed
@@ -41,10 +42,10 @@ def _utcnow() -> datetime:
 class FakeUserRepository:
     _by_id: dict[int, User] = field(default_factory=dict)
     _by_sub: dict[str, User] = field(default_factory=dict)
-    _next_id: int = 1
+    _next_id: int = 1  # unused but kept for compat
 
     async def get_by_id(self, user_id: UserId) -> User | None:
-        return self._by_id.get(int(user_id))
+        return self._by_id.get(user_id.value)
 
     async def get_by_keycloak_sub(self, sub: str) -> User | None:
         return self._by_sub.get(sub)
@@ -67,13 +68,13 @@ class FakeUserRepository:
                 first_seen_at=existing.first_seen_at,
                 last_seen_at=now,
             )
-            self._by_id[int(existing.id)] = updated
+            self._by_id[existing.id.value] = updated
             self._by_sub[sub] = updated
             return updated
-        new_id = self._next_id
-        self._next_id += 1
+        new_id = uuid4()  # generate UUID
+        # self._next_id += 1
         user = User(
-            id=UserId(new_id),
+            id=UserId(uuid4()),
             keycloak_sub=sub,
             email=email,
             full_name=full_name,
@@ -95,10 +96,10 @@ class FakeOrganizationRepository:
     _by_id: dict[int, Organization] = field(default_factory=dict)
     _by_slug: dict[str, int] = field(default_factory=dict)
     _user_to_orgs: dict[int, set[int]] = field(default_factory=dict)
-    _next_id: int = 1
+    _next_id: int = 1  # unused but kept for compat
 
     async def get(self, org_id: OrgId) -> Organization | None:
-        return self._by_id.get(int(org_id))
+        return self._by_id.get(org_id.value)
 
     async def get_by_slug(self, slug: str) -> Organization | None:
         oid = self._by_slug.get(slug)
@@ -107,10 +108,10 @@ class FakeOrganizationRepository:
     async def create(self, *, slug: str, name: str) -> Organization:
         if slug in self._by_slug:
             raise ValueError(f"slug already exists: {slug!r}")
-        new_id = self._next_id
-        self._next_id += 1
+        new_id = uuid4()  # generate UUID
+        # self._next_id += 1
         org = Organization(
-            id=OrgId(new_id),
+            id=OrgId(uuid4()),
             slug=slug,
             name=name,
             created_at=_utcnow(),
@@ -122,7 +123,7 @@ class FakeOrganizationRepository:
     async def update(
         self, org_id: OrgId, *, name: str | None
     ) -> Organization:
-        existing = self._by_id.get(int(org_id))
+        existing = self._by_id.get(org_id.value)
         if existing is None:
             raise ValueError(f"org {org_id} not found")
         updated = Organization(
@@ -131,25 +132,25 @@ class FakeOrganizationRepository:
             name=name if name is not None else existing.name,
             created_at=existing.created_at,
         )
-        self._by_id[int(existing.id)] = updated
+        self._by_id[existing.id.value] = updated
         return updated
 
     async def delete(self, org_id: OrgId) -> None:
-        existing = self._by_id.pop(int(org_id), None)
+        existing = self._by_id.pop(org_id.value, None)
         if existing is not None:
             self._by_slug.pop(existing.slug, None)
             for orgs in self._user_to_orgs.values():
-                orgs.discard(int(org_id))
+                orgs.discard(org_id.value)
 
     async def list_for_user(self, user_id: UserId) -> list[Organization]:
-        org_ids = self._user_to_orgs.get(int(user_id), set())
+        org_ids = self._user_to_orgs.get(user_id.value, set())
         return [
             self._by_id[oid] for oid in sorted(org_ids) if oid in self._by_id
         ]
 
     # ----- test helper (not part of Protocol) -------------------------- #
     def _link(self, user_id: UserId, org_id: OrgId) -> None:
-        self._user_to_orgs.setdefault(int(user_id), set()).add(int(org_id))
+        self._user_to_orgs.setdefault(user_id.value, set()).add(org_id.value)
 
 
 # --------------------------------------------------------------------------- #
@@ -161,15 +162,15 @@ class FakeOrganizationRepository:
 class FakeRoleRepository:
     _by_id: dict[int, Role] = field(default_factory=dict)
     _by_org_name: dict[tuple[int | None, str], int] = field(default_factory=dict)
-    _next_id: int = 1
+    _next_id: int = 1  # unused but kept for compat
 
     async def get(self, role_id: RoleId) -> Role | None:
-        return self._by_id.get(int(role_id))
+        return self._by_id.get(role_id.value)
 
     async def get_by_name(
         self, org_id: OrgId | None, name: RoleName
     ) -> Role | None:
-        key = (int(org_id) if org_id is not None else None, str(name))
+        key = (org_id.value if org_id is not None else None, str(name))
         rid = self._by_org_name.get(key)
         return self._by_id.get(rid) if rid is not None else None
 
@@ -181,13 +182,13 @@ class FakeRoleRepository:
         description: str | None,
         permission_keys: Sequence[PermissionKey],
     ) -> Role:
-        key = (int(org_id) if org_id is not None else None, str(name))
+        key = (org_id.value if org_id is not None else None, str(name))
         if key in self._by_org_name:
             raise ValueError(f"role already exists: {key}")
-        new_id = self._next_id
-        self._next_id += 1
+        new_id = uuid4()  # generate UUID
+        # self._next_id += 1
         role = Role(
-            id=RoleId(new_id),
+            id=RoleId(uuid4()),
             organization_id=org_id,
             name=name,
             description=description,
@@ -205,7 +206,7 @@ class FakeRoleRepository:
         description: str | None,
         permission_keys: Sequence[PermissionKey] | None,
     ) -> Role:
-        existing = self._by_id.get(int(role_id))
+        existing = self._by_id.get(role_id.value)
         if existing is None:
             raise ValueError(f"role {role_id} not found")
         new_name = name if name is not None else existing.name
@@ -221,7 +222,7 @@ class FakeRoleRepository:
             description=description if description is not None else existing.description,
             permission_keys=new_perms,
         )
-        self._by_id[int(existing.id)] = updated
+        self._by_id[existing.id.value] = updated
         if name is not None and str(name) != str(existing.name):
             old_key = (
                 int(existing.organization_id)
@@ -236,11 +237,11 @@ class FakeRoleRepository:
                 str(new_name),
             )
             self._by_org_name.pop(old_key, None)
-            self._by_org_name[new_key] = int(existing.id)
+            self._by_org_name[new_key] = existing.id.value
         return updated
 
     async def delete(self, role_id: RoleId) -> None:
-        existing = self._by_id.pop(int(role_id), None)
+        existing = self._by_id.pop(role_id.value, None)
         if existing is not None:
             key = (
                 int(existing.organization_id)
@@ -267,12 +268,12 @@ class FakeMembershipRepository:
 
     role_repo: "FakeRoleRepository | None" = None
     _by_user_org: dict[tuple[int, int], Membership] = field(default_factory=dict)
-    _next_id: int = 1
+    _next_id: int = 1  # unused but kept for compat
 
     async def get(
         self, user_id: UserId, org_id: OrgId
     ) -> Membership | None:
-        return self._by_user_org.get((int(user_id), int(org_id)))
+        return self._by_user_org.get((user_id.value, org_id.value))
 
     async def upsert(
         self,
@@ -289,7 +290,7 @@ class FakeMembershipRepository:
         role = await self.role_repo.get(role_id)
         if role is None:
             raise ValueError(f"role {role_id} not found")
-        key = (int(user_id), int(org_id))
+        key = (user_id.value, org_id.value)
         existing = self._by_user_org.get(key)
         if existing is not None:
             updated = Membership(
@@ -302,8 +303,8 @@ class FakeMembershipRepository:
                 joined_at=existing.joined_at,
             )
         else:
-            new_id = self._next_id
-            self._next_id += 1
+            new_id = uuid4()  # generate UUID
+            # self._next_id += 1
             updated = Membership(
                 id=new_id,
                 user_id=user_id,
@@ -317,12 +318,12 @@ class FakeMembershipRepository:
         return updated
 
     async def delete(self, user_id: UserId, org_id: OrgId) -> None:
-        self._by_user_org.pop((int(user_id), int(org_id)), None)
+        self._by_user_org.pop((user_id.value, org_id.value), None)
 
     async def load_auth_context(
         self, user_id: UserId, org_id: OrgId
     ) -> AuthContext | None:
-        membership = self._by_user_org.get((int(user_id), int(org_id)))
+        membership = self._by_user_org.get((user_id.value, org_id.value))
         if membership is None or self.role_repo is None:
             return None
         if membership.status != "active":
@@ -339,7 +340,7 @@ class FakeMembershipRepository:
 
     async def list_for_user(self, user_id: UserId) -> list[Membership]:
         return [
-            m for (uid, _), m in self._by_user_org.items() if uid == int(user_id)
+            m for (uid, _), m in self._by_user_org.items() if uid == user_id.value
         ]
 
 
@@ -352,7 +353,7 @@ class FakeMembershipRepository:
 class FakePermissionCatalogRepository:
     _by_id: dict[int, Permission] = field(default_factory=dict)
     _by_key: dict[str, int] = field(default_factory=dict)
-    _next_id: int = 1
+    _next_id: int = 1  # unused but kept for compat
 
     async def register_many(
         self,
@@ -371,10 +372,10 @@ class FakePermissionCatalogRepository:
                     description=description,
                 )
             else:
-                new_id = self._next_id
-                self._next_id += 1
+                new_id = uuid4()  # generate UUID
+                # self._next_id += 1
                 perm = Permission(
-                    id=PermissionId(new_id),
+                    id=PermissionId(uuid4()),
                     key=key,
                     service_name=service_name,
                     description=description,

@@ -1,55 +1,49 @@
-"""SQLAlchemy 2.x ORM models for the ACL schema.
+"""Default concrete ORM models for the ACL schema (UUID PKs).
 
-The schema lives in ``acl.*``. The same logical schema is also mirrored
-by the Django ORM adapter under ``adapters/django_orm/`` with
-``managed = False``; both ORMs query the same physical tables that the
-Alembic migration owns.
+These models use ``AclBase`` (schema ``"acl"``) and are ready to use
+out of the box for services that don't need to extend the tables. They
+inherit ACL columns from the mixins in ``mixins.py``.
+
+Services that need extra columns (like itq_users) should NOT import
+these. Instead, they create their own concrete models by inheriting
+from their own ``DeclarativeBase`` + the mixins.
 """
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import (
-    BigInteger,
     DateTime,
     ForeignKey,
-    Index,
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import AclBase
+from .mixins import (
+    MembershipMixin,
+    OrganizationMixin,
+    PermissionMixin,
+    RoleMixin,
+    UserMixin,
+)
 
 
-class UserORM(AclBase):
-    """Row in ``acl.users``. Synced lazily from JWT claims on first sight."""
-
+class UserORM(AclBase, UserMixin):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    keycloak_sub: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    email: Mapped[str] = mapped_column(String(255), index=True)
-    full_name: Mapped[str | None] = mapped_column(String(255))
-    first_seen_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    last_seen_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
     )
 
     memberships: Mapped[list["MembershipORM"]] = relationship(
@@ -58,21 +52,13 @@ class UserORM(AclBase):
     )
 
 
-class OrganizationORM(AclBase):
-    """Row in ``acl.organizations``."""
-
+class OrganizationORM(AclBase, OrganizationMixin):
     __tablename__ = "organizations"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    slug: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
     )
 
     memberships: Mapped[list["MembershipORM"]] = relationship(
@@ -85,53 +71,31 @@ class OrganizationORM(AclBase):
     )
 
 
-class PermissionORM(AclBase):
-    """Row in ``acl.permissions`` (the global permission catalog).
-
-    Each downstream service registers its own permission keys on boot
-    via :class:`RegisterPermissionCatalogUseCase`.
-    """
-
+class PermissionORM(AclBase, PermissionMixin):
     __tablename__ = "permissions"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    service_name: Mapped[str] = mapped_column(String(64), index=True)
-    description: Mapped[str | None] = mapped_column(Text)
-    registered_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
     )
 
 
-class RoleORM(AclBase):
-    """Row in ``acl.roles``.
-
-    ``organization_id`` is nullable: ``NULL`` denotes a global role
-    template that can be reused across organizations.
-    """
-
+class RoleORM(AclBase, RoleMixin):
     __tablename__ = "roles"
     __table_args__ = (
         UniqueConstraint("organization_id", "name", name="uq_roles_org_name"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    organization_id: Mapped[int | None] = mapped_column(
-        BigInteger,
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    organization_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.organizations.id", ondelete="CASCADE"),
         index=True,
-    )
-    name: Mapped[str] = mapped_column(String(128))
-    description: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
     )
 
     organization: Mapped[OrganizationORM | None] = relationship(
@@ -146,29 +110,21 @@ class RoleORM(AclBase):
 
 
 class RolePermissionORM(AclBase):
-    """Many-to-many join between ``roles`` and ``permissions``."""
-
     __tablename__ = "role_permissions"
 
-    role_id: Mapped[int] = mapped_column(
-        BigInteger,
+    role_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.roles.id", ondelete="CASCADE"),
         primary_key=True,
     )
-    permission_id: Mapped[int] = mapped_column(
-        BigInteger,
+    permission_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.permissions.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
 
-class MembershipORM(AclBase):
-    """Row in ``acl.memberships``.
-
-    A user belongs to an organization with exactly one role (v1 single-
-    role constraint enforced via the UNIQUE on ``(user_id, organization_id)``).
-    """
-
+class MembershipORM(AclBase, MembershipMixin):
     __tablename__ = "memberships"
     __table_args__ = (
         UniqueConstraint(
@@ -176,56 +132,56 @@ class MembershipORM(AclBase):
         ),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        BigInteger,
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.users.id", ondelete="CASCADE"),
         index=True,
     )
-    organization_id: Mapped[int] = mapped_column(
-        BigInteger,
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.organizations.id", ondelete="CASCADE"),
         index=True,
     )
-    role_id: Mapped[int] = mapped_column(
-        BigInteger,
+    role_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.roles.id", ondelete="RESTRICT"),
         index=True,
     )
     status: Mapped[str] = mapped_column(String(32), server_default="active")
-    joined_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
 
     user: Mapped[UserORM] = relationship(back_populates="memberships")
-    organization: Mapped[OrganizationORM] = relationship(back_populates="memberships")
+    organization: Mapped[OrganizationORM] = relationship(
+        back_populates="memberships"
+    )
     role: Mapped[RoleORM] = relationship(back_populates="memberships")
 
 
 class MembershipInvitationORM(AclBase):
-    """Pending invitations for non-existent or non-member users."""
-
     __tablename__ = "membership_invitations"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    organization_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("acl.organizations.id", ondelete="CASCADE")
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("acl.organizations.id", ondelete="CASCADE"),
     )
     email: Mapped[str] = mapped_column(String(255), index=True)
-    role_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("acl.roles.id", ondelete="RESTRICT")
+    role_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("acl.roles.id", ondelete="RESTRICT"),
     )
     token: Mapped[str] = mapped_column(String(64), unique=True)
-    invited_by_user_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("acl.users.id", ondelete="SET NULL")
+    invited_by_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("acl.users.id", ondelete="SET NULL"),
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -235,18 +191,15 @@ class MembershipInvitationORM(AclBase):
 
 
 class AuthAuditLogORM(AclBase):
-    """Append-only audit log for authorization-related actions.
-
-    Services-specific audit context belongs in service-owned tables;
-    this one only records ACL-level mutations (role changes, membership
-    grants, etc.).
-    """
-
     __tablename__ = "auth_audit_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    actor_user_id: Mapped[int | None] = mapped_column(
-        BigInteger,
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    actor_user_id: Mapped[UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
         ForeignKey("acl.users.id", ondelete="SET NULL"),
         index=True,
     )

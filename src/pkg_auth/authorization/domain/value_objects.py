@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from uuid import UUID
 
 # Format:
 #   - one or more colon-separated segments
@@ -19,16 +20,9 @@ _PERMISSION_KEY_PATTERN = re.compile(
 
 @dataclass(frozen=True, slots=True)
 class UserId:
-    """Local primary key of a row in the ``acl.users`` table.
+    """Primary key of a row in the users table (UUID)."""
 
-    Wraps the BIGINT id; *not* the Keycloak ``sub``. The mapping from
-    ``sub`` to ``UserId`` is established by ``SyncUserFromJwtUseCase``.
-    """
-
-    value: int
-
-    def __int__(self) -> int:
-        return self.value
+    value: UUID
 
     def __str__(self) -> str:
         return str(self.value)
@@ -36,12 +30,9 @@ class UserId:
 
 @dataclass(frozen=True, slots=True)
 class OrgId:
-    """Local primary key of a row in the ``acl.organizations`` table."""
+    """Primary key of a row in the organizations table (UUID)."""
 
-    value: int
-
-    def __int__(self) -> int:
-        return self.value
+    value: UUID
 
     def __str__(self) -> str:
         return str(self.value)
@@ -49,12 +40,9 @@ class OrgId:
 
 @dataclass(frozen=True, slots=True)
 class RoleId:
-    """Local primary key of a row in the ``acl.roles`` table."""
+    """Primary key of a row in the roles table (UUID)."""
 
-    value: int
-
-    def __int__(self) -> int:
-        return self.value
+    value: UUID
 
     def __str__(self) -> str:
         return str(self.value)
@@ -62,12 +50,9 @@ class RoleId:
 
 @dataclass(frozen=True, slots=True)
 class PermissionId:
-    """Local primary key of a row in the ``acl.permissions`` table."""
+    """Primary key of a row in the permissions table (UUID)."""
 
-    value: int
-
-    def __int__(self) -> int:
-        return self.value
+    value: UUID
 
     def __str__(self) -> str:
         return str(self.value)

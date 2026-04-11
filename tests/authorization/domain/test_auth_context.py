@@ -1,3 +1,4 @@
+from uuid import uuid4
 """AuthContext.has() / .require() behavior."""
 import pytest
 
@@ -12,8 +13,8 @@ from pkg_auth.authorization import (
 
 def _make_ctx(*perms: str) -> AuthContext:
     return AuthContext(
-        user_id=UserId(1),
-        organization_id=OrgId(2),
+        user_id=UserId(uuid4()),
+        organization_id=OrgId(uuid4()),
         role_name=RoleName("editor"),
         perms=frozenset(perms),
     )
@@ -49,8 +50,8 @@ def test_require_raises_when_missing():
 
 def test_require_error_message_includes_org_and_role():
     ctx = AuthContext(
-        user_id=UserId(7),
-        organization_id=OrgId(99),
+        user_id=UserId(uuid4()),
+        organization_id=OrgId(uuid4()),
         role_name=RoleName("viewer"),
         perms=frozenset(),
     )

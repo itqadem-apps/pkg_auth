@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from uuid import UUID
 
 from .exceptions import MissingPermission
 from .value_objects import (
@@ -88,7 +89,7 @@ class Membership:
     constraint at the DB level.
     """
 
-    id: int
+    id: UUID
     user_id: UserId
     organization_id: OrgId
     role_id: RoleId

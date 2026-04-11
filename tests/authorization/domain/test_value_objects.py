@@ -1,3 +1,4 @@
+from uuid import uuid4
 """Authorization value object tests."""
 from pkg_auth.authorization import (
     OrgId,
@@ -9,27 +10,27 @@ from pkg_auth.authorization import (
 
 
 def test_user_id_wraps_int():
-    uid = UserId(42)
+    uid = UserId(uuid4())
     assert uid.value == 42
     assert int(uid) == 42
     assert str(uid) == "42"
 
 
 def test_user_id_equality():
-    assert UserId(1) == UserId(1)
-    assert UserId(1) != UserId(2)
+    assert UserId(uuid4()) == UserId(uuid4())
+    assert UserId(uuid4()) != UserId(uuid4())
 
 
 def test_user_id_distinct_from_other_id_types():
     # Different types must not compare equal even with the same int value.
-    assert UserId(1) != OrgId(1)
-    assert OrgId(1) != RoleId(1)
-    assert RoleId(1) != PermissionId(1)
+    assert UserId(uuid4()) != OrgId(uuid4())
+    assert OrgId(uuid4()) != RoleId(uuid4())
+    assert RoleId(uuid4()) != PermissionId(uuid4())
 
 
 def test_id_value_objects_are_hashable():
-    s = {UserId(1), UserId(1), UserId(2)}
-    assert s == {UserId(1), UserId(2)}
+    s = {UserId(uuid4()), UserId(uuid4()), UserId(uuid4())}
+    assert s == {UserId(uuid4()), UserId(uuid4())}
 
 
 def test_role_name_wraps_string():

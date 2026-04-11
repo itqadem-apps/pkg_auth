@@ -1,8 +1,8 @@
-"""SQLAlchemy implementation of RoleRepository."""
+"""SQLAlchemy implementation of RoleRepository (UUID PKs, injectable model)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Sequence
+from dataclasses import dataclass, field
+from typing import Any, Sequence
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -15,10 +15,11 @@ from ....domain.value_objects import (
     RoleId,
     RoleName,
 )
-from ..models import PermissionORM, RoleORM
+from ..models import PermissionORM as DefaultPermissionORM
+from ..models import RoleORM as DefaultRoleORM
 
 
-def _to_role(row: RoleORM) -> Role:
+def _to_role(row: Any) -> Role:
     return Role(
         id=RoleId(row.id),
         organization_id=(
@@ -33,14 +34,16 @@ def _to_role(row: RoleORM) -> Role:
 @dataclass(slots=True)
 class SqlAlchemyRoleRepository:
     session_factory: async_sessionmaker[AsyncSession]
+    model: type = field(default=DefaultRoleORM)
+    permission_model: type = field(default=DefaultPermissionORM)
 
     async def get(self, role_id: RoleId) -> Role | None:
         async with self.session_factory() as session:
             row = (
                 await session.execute(
-                    select(RoleORM)
-                    .options(selectinload(RoleORM.permissions))
-                    .where(RoleORM.id == int(role_id))
+                    select(self.model)
+                    .options(selectinload(self.model.permissions))
+                    .where(self.model.id == role_id.value)
                 )
             ).scalar_one_or_none()
             return _to_role(row) if row is not None else None
@@ -50,15 +53,15 @@ class SqlAlchemyRoleRepository:
     ) -> Role | None:
         async with self.session_factory() as session:
             cond = (
-                RoleORM.organization_id.is_(None)
+                self.model.organization_id.is_(None)
                 if org_id is None
-                else RoleORM.organization_id == int(org_id)
+                else self.model.organization_id == org_id.value
             )
             row = (
                 await session.execute(
-                    select(RoleORM)
-                    .options(selectinload(RoleORM.permissions))
-                    .where(cond, RoleORM.name == str(name))
+                    select(self.model)
+                    .options(selectinload(self.model.permissions))
+                    .where(cond, self.model.name == str(name))
                 )
             ).scalar_one_or_none()
             return _to_role(row) if row is not None else None
@@ -72,14 +75,14 @@ class SqlAlchemyRoleRepository:
         permission_keys: Sequence[PermissionKey],
     ) -> Role:
         async with self.session_factory() as session:
-            perm_rows: list[PermissionORM] = []
+            perm_rows: list[Any] = []
             if permission_keys:
                 key_strs = [str(k) for k in permission_keys]
                 perm_rows = list(
                     (
                         await session.execute(
-                            select(PermissionORM).where(
-                                PermissionORM.key.in_(key_strs)
+                            select(self.permission_model).where(
+                                self.permission_model.key.in_(key_strs)
                             )
                         )
                     )
@@ -87,20 +90,19 @@ class SqlAlchemyRoleRepository:
                     .all()
                 )
 
-            row = RoleORM(
-                organization_id=int(org_id) if org_id is not None else None,
+            row = self.model(
+                organization_id=org_id.value if org_id is not None else None,
                 name=str(name),
                 description=description,
             )
             row.permissions = perm_rows
             session.add(row)
             await session.commit()
-            # Re-load with eager perms so _to_role can read row.permissions
             row = (
                 await session.execute(
-                    select(RoleORM)
-                    .options(selectinload(RoleORM.permissions))
-                    .where(RoleORM.id == row.id)
+                    select(self.model)
+                    .options(selectinload(self.model.permissions))
+                    .where(self.model.id == row.id)
                 )
             ).scalar_one()
             return _to_role(row)
@@ -121,17 +123,17 @@ class SqlAlchemyRoleRepository:
                 values["description"] = description
             if values:
                 await session.execute(
-                    update(RoleORM)
-                    .where(RoleORM.id == int(role_id))
+                    update(self.model)
+                    .where(self.model.id == role_id.value)
                     .values(**values)
                 )
 
             if permission_keys is not None:
                 row = (
                     await session.execute(
-                        select(RoleORM)
-                        .options(selectinload(RoleORM.permissions))
-                        .where(RoleORM.id == int(role_id))
+                        select(self.model)
+                        .options(selectinload(self.model.permissions))
+                        .where(self.model.id == role_id.value)
                     )
                 ).scalar_one()
                 key_strs = [str(k) for k in permission_keys]
@@ -139,8 +141,8 @@ class SqlAlchemyRoleRepository:
                     new_perms = list(
                         (
                             await session.execute(
-                                select(PermissionORM).where(
-                                    PermissionORM.key.in_(key_strs)
+                                select(self.permission_model).where(
+                                    self.permission_model.key.in_(key_strs)
                                 )
                             )
                         )
@@ -154,9 +156,9 @@ class SqlAlchemyRoleRepository:
             await session.commit()
             row = (
                 await session.execute(
-                    select(RoleORM)
-                    .options(selectinload(RoleORM.permissions))
-                    .where(RoleORM.id == int(role_id))
+                    select(self.model)
+                    .options(selectinload(self.model.permissions))
+                    .where(self.model.id == role_id.value)
                 )
             ).scalar_one()
             return _to_role(row)
@@ -164,6 +166,6 @@ class SqlAlchemyRoleRepository:
     async def delete(self, role_id: RoleId) -> None:
         async with self.session_factory() as session:
             await session.execute(
-                delete(RoleORM).where(RoleORM.id == int(role_id))
+                delete(self.model).where(self.model.id == role_id.value)
             )
             await session.commit()

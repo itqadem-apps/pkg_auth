@@ -1,13 +1,8 @@
-"""SQLAlchemy implementation of MembershipRepository.
-
-The hot path here is :meth:`load_auth_context` — called on every
-protected request via the FastAPI / Django / Strawberry deps.
-Implementation is a single round-trip joining ``memberships`` →
-``roles`` → ``role_permissions`` → ``permissions``.
-"""
+"""SQLAlchemy implementation of MembershipRepository (UUID PKs, injectable model)."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -21,10 +16,11 @@ from ....domain.value_objects import (
     RoleName,
     UserId,
 )
-from ..models import MembershipORM, RoleORM
+from ..models import MembershipORM as DefaultMembershipORM
+from ..models import RoleORM as DefaultRoleORM
 
 
-def _to_membership(row: MembershipORM, role_name: str) -> Membership:
+def _to_membership(row: Any, role_name: str) -> Membership:
     return Membership(
         id=row.id,
         user_id=UserId(row.user_id),
@@ -39,6 +35,8 @@ def _to_membership(row: MembershipORM, role_name: str) -> Membership:
 @dataclass(slots=True)
 class SqlAlchemyMembershipRepository:
     session_factory: async_sessionmaker[AsyncSession]
+    model: type = field(default=DefaultMembershipORM)
+    role_model: type = field(default=DefaultRoleORM)
 
     async def get(
         self, user_id: UserId, org_id: OrgId
@@ -46,11 +44,11 @@ class SqlAlchemyMembershipRepository:
         async with self.session_factory() as session:
             row = (
                 await session.execute(
-                    select(MembershipORM)
-                    .options(selectinload(MembershipORM.role))
+                    select(self.model)
+                    .options(selectinload(self.model.role))
                     .where(
-                        MembershipORM.user_id == int(user_id),
-                        MembershipORM.organization_id == int(org_id),
+                        self.model.user_id == user_id.value,
+                        self.model.organization_id == org_id.value,
                     )
                 )
             ).scalar_one_or_none()
@@ -65,27 +63,28 @@ class SqlAlchemyMembershipRepository:
         status: str,
     ) -> Membership:
         stmt = (
-            pg_insert(MembershipORM)
+            pg_insert(self.model)
             .values(
-                user_id=int(user_id),
-                organization_id=int(org_id),
-                role_id=int(role_id),
+                user_id=user_id.value,
+                organization_id=org_id.value,
+                role_id=role_id.value,
                 status=status,
             )
             .on_conflict_do_update(
                 index_elements=["user_id", "organization_id"],
-                set_={"role_id": int(role_id), "status": status},
+                set_={"role_id": role_id.value, "status": status},
             )
-            .returning(MembershipORM)
+            .returning(self.model)
         )
         async with self.session_factory() as session:
             result = await session.execute(stmt)
             await session.commit()
             row = result.scalar_one()
-            # Need to load the role for role_name
             role = (
                 await session.execute(
-                    select(RoleORM).where(RoleORM.id == row.role_id)
+                    select(self.role_model).where(
+                        self.role_model.id == row.role_id
+                    )
                 )
             ).scalar_one()
             return _to_membership(row, role.name)
@@ -93,9 +92,9 @@ class SqlAlchemyMembershipRepository:
     async def delete(self, user_id: UserId, org_id: OrgId) -> None:
         async with self.session_factory() as session:
             await session.execute(
-                delete(MembershipORM).where(
-                    MembershipORM.user_id == int(user_id),
-                    MembershipORM.organization_id == int(org_id),
+                delete(self.model).where(
+                    self.model.user_id == user_id.value,
+                    self.model.organization_id == org_id.value,
                 )
             )
             await session.commit()
@@ -103,22 +102,18 @@ class SqlAlchemyMembershipRepository:
     async def load_auth_context(
         self, user_id: UserId, org_id: OrgId
     ) -> AuthContext | None:
-        """Hot path: single query joining membership → role → permissions.
-
-        Returns ``None`` if there is no active membership.
-        """
         async with self.session_factory() as session:
             stmt = (
-                select(MembershipORM)
+                select(self.model)
                 .options(
-                    selectinload(MembershipORM.role).selectinload(
-                        RoleORM.permissions
+                    selectinload(self.model.role).selectinload(
+                        self.role_model.permissions
                     )
                 )
                 .where(
-                    MembershipORM.user_id == int(user_id),
-                    MembershipORM.organization_id == int(org_id),
-                    MembershipORM.status == "active",
+                    self.model.user_id == user_id.value,
+                    self.model.organization_id == org_id.value,
+                    self.model.status == "active",
                 )
             )
             row = (await session.execute(stmt)).scalar_one_or_none()
@@ -135,9 +130,9 @@ class SqlAlchemyMembershipRepository:
         async with self.session_factory() as session:
             rows = (
                 await session.execute(
-                    select(MembershipORM)
-                    .options(selectinload(MembershipORM.role))
-                    .where(MembershipORM.user_id == int(user_id))
+                    select(self.model)
+                    .options(selectinload(self.model.role))
+                    .where(self.model.user_id == user_id.value)
                 )
             ).scalars().all()
             return [_to_membership(r, r.role.name) for r in rows]
