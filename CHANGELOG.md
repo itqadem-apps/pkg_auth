@@ -1,0 +1,243 @@
+# Changelog
+
+All notable changes to `pkg-auth` are documented here. Versions follow
+[Semantic Versioning](https://semver.org/).
+
+## [1.4.0] — 2026-04-12
+
+### Added — `is_platform` permission scope
+
+- `PermissionMixin.is_platform` (`Boolean NOT NULL DEFAULT false`) on the
+  SQLAlchemy and Django ORM mixins. Distinguishes permissions that operate
+  inside a single organization from permissions that only make sense at
+  platform/system level across organizations (e.g. `organizations:create`,
+  `organizations:approve`).
+- `Permission.is_platform: bool = False` on the domain entity.
+- `CatalogEntry` dataclass for permission registration. Replaces the old
+  2-tuple `(key, description)` shape with a clearer named structure that
+  carries `is_platform`. Re-exported from `pkg_auth.authorization`.
+- `PermissionScope` literal type (`"org" | "platform" | "all"`) and
+  `scope=` keyword on `PermissionCatalogRepository.list_all()` and
+  `PermissionCatalogRepository.list_for_service()`. The SQLAlchemy and
+  Django implementations translate the scope to a SQL `WHERE` clause.
+- Alembic migration `pkg_auth_acl_0002_add_permission_is_platform` adds
+  the column to `acl.permissions` for SoT services.
+
+### Backwards-compatible registration shapes
+
+`RegisterPermissionCatalogUseCase.execute()` now accepts any of:
+
+- `CatalogEntry(PermissionKey("..."), "desc", is_platform=True)`  *(preferred)*
+- `(PermissionKey("..."), "desc")`         *(legacy 2-tuple — defaults `is_platform=False`)*
+- `(PermissionKey("..."), "desc", True)`   *(legacy 3-tuple)*
+
+Existing services upgrade by bumping `pkg-auth>=1.4.0`, applying the
+column-add migration, and optionally migrating to the `CatalogEntry`
+shape when they want to mark platform permissions.
+
+### Added — multi-role per organization (Django adapter parity)
+
+The SQLAlchemy adapter shipped multi-role support in v1.3 (unreleased);
+v1.4 brings the Django adapter to parity:
+
+- `Membership.unique_together = (("user", "organization", "role"),)` —
+  one row per role; users can hold multiple roles in the same org.
+- `DjangoMembershipRepository.load_auth_context()` aggregates the union
+  of all *active* memberships and returns a single `AuthContext` with
+  `role_names: frozenset[str]` and merged `perms`.
+- `AuthContext.role_names` (frozenset) replaces the singular
+  `role_name`. Use `ctx.has_role("editor")` for membership checks.
+- `AuthContext.has(perm)` and `ctx.require(perm)` are unchanged.
+
+### Platform-admin detection — service-level helper, not a flag
+
+`AuthContext` deliberately does **not** carry an `is_platform: bool`
+flag. Platform-admin detection is a *service-level* policy: the
+consuming service designates one of its organizations as the "platform"
+org and grants its members cross-org administrative privileges.
+
+pkg_auth ships a stateless helper:
+
+```python
+from pkg_auth.authorization import is_platform_context
+
+@require_permission("users:read")
+async def list_users(request):
+    auth_ctx = request.auth_context
+    if is_platform_context(auth_ctx, cached_platform_org_id):
+        users = User.objects.all()
+    else:
+        users = User.objects.filter(
+            memberships__organization_id=auth_ctx.organization_id.value,
+        )
+    ...
+```
+
+The signature is:
+
+```python
+def is_platform_context(
+    auth_ctx: AuthContext, platform_org_id: OrgId | None,
+) -> bool: ...
+```
+
+Returns `True` when `auth_ctx.organization_id == platform_org_id`,
+`False` otherwise (including when `platform_org_id` is `None`, e.g.
+before the cache is initialized).
+
+The consuming service is responsible for caching `platform_org_id`
+wherever makes sense — module global, app config, request scope. A
+typical pattern resolves the slug once at startup:
+
+```python
+_platform_org_id: OrgId | None = None
+
+async def init_platform_org_id() -> None:
+    global _platform_org_id
+    org = await org_repo.get_by_slug("platform")
+    if org is not None:
+        _platform_org_id = org.id
+```
+
+**Why not a field on `AuthContext`?** Two ways to ask the same
+question (a field on the dataclass *and* a helper) creates drift. The
+helper-based approach also keeps `pkg_auth` decoupled from "what
+counts as a platform admin" — that's a service-level policy, not a
+package concern. See `docs/Django.md` for the full pattern.
+
+### Added — Django adapter v1.4
+
+### Added — Django adapter v1.4
+
+- **UUID PKs everywhere.** All Django ORM models now use `UUIDField`
+  PKs to match the SQLAlchemy schema (which moved to UUID in v1.2).
+- **Abstract Django mixins** (`UserMixin`, `OrganizationMixin`,
+  `PermissionMixin`, `RoleMixin`, `MembershipMixin`) under
+  `pkg_auth.authorization.adapters.django_orm.mixins`. Mirror the
+  SQLAlchemy mixin pattern: consuming services subclass the mixin to
+  add their own columns and own the schema. Default `managed=False`
+  concrete models in `models.py` inherit the mixins for services that
+  don't need to extend.
+- **Injectable model classes** on every Django repo
+  (`DjangoUserRepository.model`, `DjangoMembershipRepository.role_model`,
+  etc.). Lets services pass their own concrete subclasses without
+  monkey-patching the package.
+- `AuthContextMiddleware` now parses `X-Organization-Id` as a UUID
+  first and falls back to slug lookup. The legacy `isdigit()` BIGINT
+  fast-path is removed.
+### Added — FastAPI adapter parity
+
+- `make_get_auth_context(...)` parses the org header as UUID-or-slug
+  instead of `isdigit()`.
+
+### Test suite cleanup
+
+Repaired pre-existing damage from a sed-based v1.2 UUID migration that
+left the test suite in a non-collectible state:
+
+- `tests/.../fakes.py` rewritten — type-correct UUIDs throughout,
+  multi-role-aware `FakeMembershipRepository`, `CatalogEntry`-aware
+  `FakePermissionCatalogRepository` with scope filtering.
+- `tests/.../domain/test_value_objects.py` — meaningful equality and
+  hashability assertions.
+- `tests/.../domain/test_auth_context.py` — uses `role_names`,
+  exercises `has_role()`, covers `is_platform`.
+- `tests/.../application/test_*.py` — pass real `uuid4()` to
+  `UserId/OrgId/RoleId` constructors instead of bare ints.
+
+Test suite goes from 41 collected (6 collection errors, 10 failing) on
+the v1.2 baseline to **85 passing / 0 failing** on v1.4.
+
+### Migration guide
+
+Consumers must:
+
+1. Bump `pkg-auth>=1.4.0` in `requirements.txt` / `pyproject.toml`.
+2. Run an Alembic migration to add the column on the `permissions` table:
+
+   ```python
+   op.add_column(
+       "permissions",
+       sa.Column(
+           "is_platform",
+           sa.Boolean(),
+           nullable=False,
+           server_default=sa.text("false"),
+       ),
+   )
+   ```
+
+   SoT services that re-use the package's Alembic branch can simply
+   `alembic upgrade pkg_auth_acl@head`.
+3. Migrate the permission catalog declaration to `CatalogEntry` for
+   permissions that should be platform-only.
+4. Drop any in-code workarounds (frozenset of platform perms, in-Python
+   filters) — query the repo with `scope="platform"` instead.
+
+### Notes for Django consumers
+
+- The `default_auto_field` on the package's `AppConfig` is
+  `BigAutoField` because Django requires an `AutoField` subclass and
+  `UUIDField` isn't one. Every concrete ACL model declares its own
+  `UUIDField` PK explicitly so this default is effectively unused.
+- Importing the abstract mixins: use the explicit submodule, not the
+  package `__init__`:
+  `from pkg_auth.authorization.adapters.django_orm.mixins import UserMixin`.
+  The `__init__.py` deliberately does NOT import the mixin module so
+  Django's app loading order works correctly.
+
+## [1.3.0] — 2026-04-11
+
+### Multi-role per organization
+
+A user can now hold multiple roles in the same organization. The
+membership table's uniqueness moves from `(user, organization)` to
+`(user, organization, role)`, and the auth context exposes the
+union of all active roles' permissions:
+
+- `Membership` schema: `UNIQUE(user_id, organization_id, role_id)`
+  in the SQLAlchemy adapter; one row per role.
+- `AuthContext.role_names: frozenset[str]` (renamed from singular
+  `role_name`) — every active role the user holds in the active org.
+- `AuthContext.perms` — union of all active roles' permission keys.
+- `AuthContext.has_role(role: str) -> bool` — convenience check.
+- `MembershipRepository.load_auth_context()` aggregates the union
+  in a single query (with `selectinload`/`prefetch_related`).
+
+### Migration
+
+Consumers must migrate the `memberships` table's unique constraint:
+
+```python
+op.drop_constraint("uq_memberships_user_org", "memberships")
+op.create_unique_constraint(
+    "uq_memberships_user_org_role",
+    "memberships",
+    ["user_id", "organization_id", "role_id"],
+)
+```
+
+Handler call sites that read `auth_ctx.role_name` (singular) must
+move to `auth_ctx.role_names` (frozenset) or `auth_ctx.has_role(...)`.
+
+## [1.2.0] — 2026-04-10
+
+- UUID primary keys throughout the SQLAlchemy adapter.
+- Extensible mixin models — `UserMixin`, `OrganizationMixin`,
+  `PermissionMixin`, `RoleMixin`, `MembershipMixin` — under
+  `pkg_auth.authorization.adapters.sqlalchemy.mixins`.
+- Default concrete `*ORM` models in `models.py` for services that
+  don't extend.
+- Injectable `model` field on every SQLAlchemy repo.
+- Initial Alembic migration (`pkg_auth_acl_0001_initial_acl_schema`).
+
+## [1.1.0] — earlier
+
+- ACL refactor moved into the package: domain entities, value objects,
+  ports, application use cases, SQLAlchemy adapter, FastAPI/Django/
+  Strawberry integrations.
+
+## [1.0.0] — earlier
+
+- Initial public release. Authentication module (Keycloak JWT decoder,
+  IdentityContext) only.
