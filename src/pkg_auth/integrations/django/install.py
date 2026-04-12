@@ -54,6 +54,7 @@ def install_pkg_auth(
         from pkg_auth.integrations.django import install_pkg_auth
         from pkg_auth.authorization.adapters.django_orm.repositories import (
             DjangoUserRepository, DjangoOrganizationRepository,
+            DjangoMembershipRepository,
         )
         from pkg_auth.authorization.application.use_cases.sync_user_from_jwt import SyncUserFromJwtUseCase
         from pkg_auth.authorization.application.use_cases.resolve_auth_context import ResolveAuthContextUseCase
@@ -71,6 +72,11 @@ def install_pkg_auth(
             ),
             organization_repo=org_repo,
         )
+
+    Platform-admin detection is a service-level concern. Cache your
+    platform org id at startup (e.g. in this same ``ready()`` hook),
+    then call :func:`pkg_auth.authorization.is_platform_context` from
+    your views to compare against ``request.auth_context.organization_id``.
     """
     global _REGISTRY
 

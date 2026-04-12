@@ -1,24 +1,32 @@
-"""Django ORM mirror models for the ACL schema.
+"""Default concrete Django ORM mirror models for the ACL schema (UUID PKs).
 
-All models declare ``Meta.managed = False`` because the schema is owned
+These models declare ``Meta.managed = False`` because the schema is owned
 by the SQLAlchemy adapter's Alembic migrations. The ``db_table`` values
-include the ``acl.`` schema prefix using Django's
-``'schema"."table'`` quoting trick so queries hit the right schema.
+include the ``acl.`` schema prefix using Django's ``'schema"."table'``
+quoting trick so queries hit the right schema.
+
+Services that need to extend the ACL tables with their own columns
+should NOT import these. Instead, they create their own concrete models
+inheriting from the abstract mixins in ``mixins.py`` and own the
+schema (managed=True) themselves.
 """
 from __future__ import annotations
 
+import uuid
+
 from django.db import models
 
+from .mixins import (
+    MembershipMixin,
+    OrganizationMixin,
+    PermissionMixin,
+    RoleMixin,
+    UserMixin,
+)
 
-class User(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    keycloak_sub = models.CharField(max_length=64, unique=True)
-    email = models.CharField(max_length=255)
-    full_name = models.CharField(max_length=255, null=True, blank=True)
-    first_seen_at = models.DateTimeField()
-    last_seen_at = models.DateTimeField()
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
+
+class User(UserMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     class Meta:
         managed = False
@@ -26,12 +34,8 @@ class User(models.Model):
         app_label = "pkg_auth_acl"
 
 
-class Organization(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    slug = models.CharField(max_length=255, unique=True)
-    name = models.CharField(max_length=255)
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
+class Organization(OrganizationMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     class Meta:
         managed = False
@@ -39,12 +43,8 @@ class Organization(models.Model):
         app_label = "pkg_auth_acl"
 
 
-class Permission(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    key = models.CharField(max_length=255, unique=True)
-    service_name = models.CharField(max_length=64)
-    description = models.TextField(null=True, blank=True)
-    registered_at = models.DateTimeField()
+class Permission(PermissionMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     class Meta:
         managed = False
@@ -52,8 +52,8 @@ class Permission(models.Model):
         app_label = "pkg_auth_acl"
 
 
-class Role(models.Model):
-    id = models.BigAutoField(primary_key=True)
+class Role(RoleMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -62,10 +62,6 @@ class Role(models.Model):
         db_column="organization_id",
         related_name="roles",
     )
-    name = models.CharField(max_length=128)
-    description = models.TextField(null=True, blank=True)
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
     permissions = models.ManyToManyField(
         Permission,
         through="RolePermission",
@@ -100,8 +96,15 @@ class RolePermission(models.Model):
         unique_together = (("role", "permission"),)
 
 
-class Membership(models.Model):
-    id = models.BigAutoField(primary_key=True)
+class Membership(MembershipMixin):
+    """Multi-role-aware: ``UNIQUE(user, organization, role)``.
+
+    A user can hold multiple memberships in the same organization (one row
+    per role); ``DjangoMembershipRepository.load_auth_context`` aggregates
+    them into the union of all active roles' permissions.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -121,19 +124,16 @@ class Membership(models.Model):
         related_name="memberships",
     )
     status = models.CharField(max_length=32, default="active")
-    joined_at = models.DateTimeField()
-    created_at = models.DateTimeField()
-    updated_at = models.DateTimeField()
 
     class Meta:
         managed = False
         db_table = 'acl"."memberships'
         app_label = "pkg_auth_acl"
-        unique_together = (("user", "organization"),)
+        unique_together = (("user", "organization", "role"),)
 
 
 class MembershipInvitation(models.Model):
-    id = models.BigAutoField(primary_key=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
         Organization,
         on_delete=models.CASCADE,
@@ -154,7 +154,7 @@ class MembershipInvitation(models.Model):
     )
     expires_at = models.DateTimeField()
     accepted_at = models.DateTimeField(null=True)
-    created_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         managed = False
@@ -163,7 +163,7 @@ class MembershipInvitation(models.Model):
 
 
 class AuthAuditLog(models.Model):
-    id = models.BigAutoField(primary_key=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     actor_user = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -174,7 +174,7 @@ class AuthAuditLog(models.Model):
     target_type = models.CharField(max_length=64)
     target_id = models.CharField(max_length=64)
     payload = models.JSONField()
-    occurred_at = models.DateTimeField()
+    occurred_at = models.DateTimeField(auto_now_add=True)
     request_id = models.CharField(max_length=64, null=True)
 
     class Meta:

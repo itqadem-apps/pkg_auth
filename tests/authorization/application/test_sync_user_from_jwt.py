@@ -12,10 +12,13 @@ async def test_first_sight_creates_user():
     user = await uc.execute(
         sub="kc-uuid-1", email="alice@example.com", full_name="Alice",
     )
-    assert int(user.id) == 1
     assert user.keycloak_sub == "kc-uuid-1"
     assert user.email == "alice@example.com"
     assert user.full_name == "Alice"
+    # The fake assigns a fresh UUID; the round-trip should hit the same row.
+    fetched = await repo.get_by_keycloak_sub("kc-uuid-1")
+    assert fetched is not None
+    assert fetched.id == user.id
 
 
 async def test_repeat_sight_keeps_id_and_updates_metadata():
@@ -27,7 +30,7 @@ async def test_repeat_sight_keeps_id_and_updates_metadata():
     second = await uc.execute(
         sub="kc-uuid-1", email="new@example.com", full_name="Alice Renamed",
     )
-    assert int(second.id) == int(first.id)
+    assert second.id == first.id
     assert second.email == "new@example.com"
     assert second.full_name == "Alice Renamed"
     # first_seen_at should be preserved across upserts
@@ -39,4 +42,4 @@ async def test_distinct_subs_get_distinct_ids():
     uc = SyncUserFromJwtUseCase(user_repo=repo)
     a = await uc.execute(sub="kc-1", email="a@example.com", full_name=None)
     b = await uc.execute(sub="kc-2", email="b@example.com", full_name=None)
-    assert int(a.id) != int(b.id)
+    assert a.id != b.id

@@ -4,10 +4,21 @@ Composes ``Authentication.get_identity`` (from the authentication
 module) with the authorization layer's ``ResolveAuthContextUseCase``,
 ``SyncUserFromJwtUseCase``, and ``OrganizationRepository`` to produce a
 single FastAPI dependency that returns ``(IdentityContext, AuthContext)``.
+
+pkg_auth deliberately does NOT bake in a "platform admin fallback"
+here. Platform-admin detection is a *service-level* policy: services
+that want it call :func:`pkg_auth.authorization.is_platform_context`
+inside handlers, comparing the request's ``AuthContext.organization_id``
+against their own cached platform org id. Services that need
+elevated-privilege fallbacks (resolving the caller against a platform
+org when they aren't a member of the requested org) wrap this factory
+in their own dependency. See ``docs/FastAPI.md`` for the canonical
+pattern.
 """
 from __future__ import annotations
 
 from typing import Awaitable, Callable
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
 
@@ -42,8 +53,8 @@ def make_get_auth_context(
     The dependency:
         1. Resolves identity via the injected ``get_identity``.
         2. Lazily upserts the local user row from JWT claims.
-        3. Reads ``header_name`` from the request (numeric → org_id,
-           non-numeric → org slug).
+        3. Reads ``header_name`` from the request and parses it as a
+           UUID first, falling back to a slug lookup.
         4. Resolves the user's auth context for that organization.
 
     Errors map to:
@@ -69,9 +80,9 @@ def make_get_auth_context(
             full_name=identity.full_name,
         )
 
-        if raw.isdigit():
-            org = await organization_repo.get(OrgId(int(raw)))
-        else:
+        try:
+            org = await organization_repo.get(OrgId(UUID(raw)))
+        except (ValueError, AttributeError):
             org = await organization_repo.get_by_slug(raw)
         if org is None:
             raise HTTPException(

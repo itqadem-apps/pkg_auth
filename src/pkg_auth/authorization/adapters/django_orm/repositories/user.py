@@ -1,17 +1,17 @@
 """Django ORM implementation of UserRepository."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 
 from ....domain.entities import User as DomainUser
 from ....domain.value_objects import UserId
-from ..models import User as UserModel
+from ..models import User as DefaultUserModel
 
 
-def _to_domain(row: UserModel) -> DomainUser:
+def _to_domain(row) -> DomainUser:
     return DomainUser(
         id=UserId(row.id),
         keycloak_sub=row.keycloak_sub,
@@ -26,22 +26,24 @@ def _to_domain(row: UserModel) -> DomainUser:
 class DjangoUserRepository:
     """Django ORM implementation of UserRepository.
 
-    Uses Django's native async ORM (``aget``, ``acreate``, ``afilter``)
-    so it can be wired into FastAPI / Strawberry / async Django views
-    without thread-pool round-trips.
+    The ``model`` field accepts any concrete Django model class that
+    inherits from :class:`pkg_auth.authorization.adapters.django_orm.UserMixin`.
+    Defaults to the package's managed=False mirror model.
     """
+
+    model: type = field(default=DefaultUserModel)
 
     async def get_by_id(self, user_id: UserId) -> DomainUser | None:
         try:
-            row = await UserModel.objects.aget(id=int(user_id))
-        except UserModel.DoesNotExist:
+            row = await self.model.objects.aget(id=user_id.value)
+        except self.model.DoesNotExist:
             return None
         return _to_domain(row)
 
     async def get_by_keycloak_sub(self, sub: str) -> DomainUser | None:
         try:
-            row = await UserModel.objects.aget(keycloak_sub=sub)
-        except UserModel.DoesNotExist:
+            row = await self.model.objects.aget(keycloak_sub=sub)
+        except self.model.DoesNotExist:
             return None
         return _to_domain(row)
 
@@ -54,14 +56,14 @@ class DjangoUserRepository:
     ) -> DomainUser:
         now = datetime.now(timezone.utc)
         try:
-            row = await UserModel.objects.aget(keycloak_sub=sub)
+            row = await self.model.objects.aget(keycloak_sub=sub)
             row.email = email
             row.full_name = full_name
             row.last_seen_at = now
             await row.asave(update_fields=["email", "full_name", "last_seen_at"])
-        except UserModel.DoesNotExist:
+        except self.model.DoesNotExist:
             try:
-                row = await UserModel.objects.acreate(
+                row = await self.model.objects.acreate(
                     keycloak_sub=sub,
                     email=email,
                     full_name=full_name,
@@ -71,6 +73,5 @@ class DjangoUserRepository:
                     updated_at=now,
                 )
             except IntegrityError:
-                # Race: another request created the user between aget and acreate.
-                row = await UserModel.objects.aget(keycloak_sub=sub)
+                row = await self.model.objects.aget(keycloak_sub=sub)
         return _to_domain(row)

@@ -7,7 +7,7 @@ only from this module; it must not import any concrete adapter.
 """
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from typing import TYPE_CHECKING, Literal, Protocol, Sequence
 
 from .entities import (
     AuthContext,
@@ -24,6 +24,13 @@ from .value_objects import (
     RoleName,
     UserId,
 )
+
+if TYPE_CHECKING:
+    from ..application.use_cases.register_permission_catalog import (
+        CatalogEntry,
+    )
+
+PermissionScope = Literal["org", "platform", "all"]
 
 
 class UserRepository(Protocol):
@@ -112,13 +119,25 @@ class MembershipRepository(Protocol):
 
 
 class PermissionCatalogRepository(Protocol):
-    """Read/write access to ``acl.permissions`` (the global perm catalog)."""
+    """Read/write access to ``acl.permissions`` (the global perm catalog).
+
+    The ``scope`` argument on the list methods filters by the
+    ``is_platform`` flag on each catalog row:
+
+    - ``"org"``      → only permissions usable inside an organization
+    - ``"platform"`` → only platform/system-level permissions
+    - ``"all"``      → no filter (default)
+    """
 
     async def register_many(
         self,
         *,
         service_name: str,
-        entries: Sequence[tuple[PermissionKey, str | None]],
+        entries: Sequence["CatalogEntry"],
     ) -> None: ...
-    async def list_all(self) -> list[Permission]: ...
-    async def list_for_service(self, service_name: str) -> list[Permission]: ...
+    async def list_all(
+        self, *, scope: PermissionScope = "all"
+    ) -> list[Permission]: ...
+    async def list_for_service(
+        self, service_name: str, *, scope: PermissionScope = "all"
+    ) -> list[Permission]: ...

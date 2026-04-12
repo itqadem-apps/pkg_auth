@@ -14,6 +14,7 @@ adapters in M4 / M6; cache layer in M5; framework integrations in M7-M9.
 """
 from __future__ import annotations
 
+from .application.use_cases.register_permission_catalog import CatalogEntry
 from .domain.entities import (
     AuthContext,
     Membership,
@@ -22,6 +23,7 @@ from .domain.entities import (
     Role,
     User,
 )
+from .platform import is_platform_context
 from .domain.exceptions import (
     AuthorizationError,
     MissingPermission,
@@ -35,6 +37,7 @@ from .domain.ports import (
     MembershipRepository,
     OrganizationRepository,
     PermissionCatalogRepository,
+    PermissionScope,
     RoleRepository,
     UserRepository,
 )
@@ -68,6 +71,11 @@ __all__ = [
     "RoleRepository",
     "MembershipRepository",
     "PermissionCatalogRepository",
+    # Application DTOs
+    "CatalogEntry",
+    "PermissionScope",
+    # Platform helpers
+    "is_platform_context",
     # Exceptions
     "AuthorizationError",
     "NotAMember",

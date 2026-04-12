@@ -1,7 +1,10 @@
 """Role use case tests (create / update / delete + perm validation)."""
+from uuid import uuid4
+
 import pytest
 
 from pkg_auth.authorization import (
+    CatalogEntry,
     OrgId,
     PermissionKey,
     RoleId,
@@ -35,9 +38,9 @@ async def _seed_catalog(repo: FakePermissionCatalogRepository) -> None:
     await register.execute(
         service_name="courses",
         entries=[
-            (PermissionKey("course:edit"), None),
-            (PermissionKey("course:view"), None),
-            (PermissionKey("course:delete"), None),
+            CatalogEntry(PermissionKey("course:edit"), None),
+            CatalogEntry(PermissionKey("course:view"), None),
+            CatalogEntry(PermissionKey("course:delete"), None),
         ],
     )
 
@@ -72,7 +75,7 @@ async def test_create_role_with_unknown_org_raises():
     )
     with pytest.raises(UnknownOrganization):
         await uc.execute(
-            org_id=OrgId(999),
+            org_id=OrgId(uuid4()),
             name=RoleName("editor"),
             description=None,
             permission_keys=[],
@@ -151,7 +154,7 @@ async def test_update_role_unknown_role_raises():
     catalog = FakePermissionCatalogRepository()
     uc = UpdateRoleUseCase(role_repo=role_repo, catalog_repo=catalog)
     with pytest.raises(UnknownRole):
-        await uc.execute(RoleId(999), name=RoleName("nope"))
+        await uc.execute(RoleId(uuid4()), name=RoleName("nope"))
 
 
 async def test_update_role_unknown_perm_raises():

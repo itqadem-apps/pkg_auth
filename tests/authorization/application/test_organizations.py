@@ -1,4 +1,6 @@
 """Organization use case tests (create / update / delete / list_for_user)."""
+from uuid import uuid4
+
 import pytest
 
 from pkg_auth.authorization import OrgId, UnknownOrganization, UserId
@@ -22,9 +24,12 @@ async def test_create_persists_organization():
     repo = FakeOrganizationRepository()
     uc = CreateOrganizationUseCase(organization_repo=repo)
     org = await uc.execute(slug="acme", name="ACME Corp")
-    assert str(org.slug) == "acme"
+    assert org.slug == "acme"
     assert org.name == "ACME Corp"
-    assert int(org.id) == 1
+    # Round-trips through the repo
+    fetched = await repo.get(org.id)
+    assert fetched is not None
+    assert fetched.id == org.id
 
 
 async def test_update_changes_name_only():
@@ -40,7 +45,7 @@ async def test_update_unknown_org_raises():
     repo = FakeOrganizationRepository()
     uc = UpdateOrganizationUseCase(organization_repo=repo)
     with pytest.raises(UnknownOrganization):
-        await uc.execute(OrgId(999), name="Nope")
+        await uc.execute(OrgId(uuid4()), name="Nope")
 
 
 async def test_delete_is_idempotent():
@@ -54,13 +59,14 @@ async def test_delete_is_idempotent():
 
 async def test_list_for_user_returns_linked_orgs():
     repo = FakeOrganizationRepository()
+    user = UserId(uuid4())
     a = await repo.create(slug="acme", name="ACME")
     b = await repo.create(slug="globex", name="Globex")
-    repo._link(UserId(7), a.id)
-    repo._link(UserId(7), b.id)
+    repo._link(user, a.id)
+    repo._link(user, b.id)
 
     uc = ListUserOrganizationsUseCase(organization_repo=repo)
-    orgs = await uc.execute(UserId(7))
+    orgs = await uc.execute(user)
     assert {o.slug for o in orgs} == {"acme", "globex"}
 
 
@@ -68,5 +74,5 @@ async def test_list_for_user_returns_empty_when_no_memberships():
     repo = FakeOrganizationRepository()
     await repo.create(slug="acme", name="ACME")
     uc = ListUserOrganizationsUseCase(organization_repo=repo)
-    orgs = await uc.execute(UserId(7))
+    orgs = await uc.execute(UserId(uuid4()))
     assert orgs == []

@@ -1,4 +1,6 @@
 """Membership use case tests (upsert / delete)."""
+from uuid import uuid4
+
 import pytest
 
 from pkg_auth.authorization import (
@@ -86,7 +88,9 @@ async def test_upsert_unknown_user_raises():
         membership_repo=m_repo,
     )
     with pytest.raises(UnknownUser):
-        await uc.execute(user_id=UserId(999), org_id=org.id, role_id=role.id)
+        await uc.execute(
+            user_id=UserId(uuid4()), org_id=org.id, role_id=role.id,
+        )
 
 
 async def test_upsert_unknown_org_raises():
@@ -98,7 +102,9 @@ async def test_upsert_unknown_org_raises():
         membership_repo=m_repo,
     )
     with pytest.raises(UnknownOrganization):
-        await uc.execute(user_id=user.id, org_id=OrgId(999), role_id=role.id)
+        await uc.execute(
+            user_id=user.id, org_id=OrgId(uuid4()), role_id=role.id,
+        )
 
 
 async def test_upsert_unknown_role_raises():
@@ -110,7 +116,9 @@ async def test_upsert_unknown_role_raises():
         membership_repo=m_repo,
     )
     with pytest.raises(UnknownRole):
-        await uc.execute(user_id=user.id, org_id=org.id, role_id=RoleId(999))
+        await uc.execute(
+            user_id=user.id, org_id=org.id, role_id=RoleId(uuid4()),
+        )
 
 
 async def test_delete_is_idempotent():

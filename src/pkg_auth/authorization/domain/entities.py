@@ -53,13 +53,17 @@ class Permission:
     """A row from ``acl.permissions`` (the global permission catalog).
 
     Each downstream service registers its own permission keys on boot
-    via ``RegisterPermissionCatalogUseCase``.
+    via ``RegisterPermissionCatalogUseCase``. ``is_platform`` marks
+    permissions that only apply at the platform/system level (e.g.
+    ``organizations:create``) so the central role editor can filter
+    them out of org-scoped role builders.
     """
 
     id: PermissionId
     key: PermissionKey
     service_name: str
     description: str | None
+    is_platform: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,9 +88,10 @@ class Membership:
     """A row from ``acl.memberships``.
 
     ``role_name`` is denormalized from the joined role for cheap
-    construction of an :class:`AuthContext` without re-querying. v1
-    enforces a single role per ``(user, organization)`` via a UNIQUE
-    constraint at the DB level.
+    construction of an :class:`AuthContext` without re-querying. A user
+    can hold multiple memberships in the same organization — one row per
+    role — and the schema enforces uniqueness on
+    ``(user_id, organization_id, role_id)``.
     """
 
     id: UUID
@@ -108,6 +113,12 @@ class AuthContext:
 
     Frozen because handler code must not mutate the perms set after the
     dependency layer has built it.
+
+    pkg_auth deliberately does NOT carry a ``is_platform`` flag here.
+    Platform-admin detection is a *service-level* policy: consuming
+    services cache their platform org's id at startup and call
+    :func:`pkg_auth.authorization.is_platform_context` to compare against
+    ``self.organization_id``. See the package docs for the pattern.
     """
 
     user_id: UserId

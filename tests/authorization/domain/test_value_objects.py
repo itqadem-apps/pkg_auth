@@ -1,5 +1,6 @@
-from uuid import uuid4
 """Authorization value object tests."""
+from uuid import UUID, uuid4
+
 from pkg_auth.authorization import (
     OrgId,
     PermissionId,
@@ -9,28 +10,32 @@ from pkg_auth.authorization import (
 )
 
 
-def test_user_id_wraps_int():
-    uid = UserId(uuid4())
-    assert uid.value == 42
-    assert int(uid) == 42
-    assert str(uid) == "42"
+def test_user_id_wraps_uuid():
+    raw = uuid4()
+    uid = UserId(raw)
+    assert uid.value == raw
+    assert isinstance(uid.value, UUID)
+    assert str(uid) == str(raw)
 
 
 def test_user_id_equality():
-    assert UserId(uuid4()) == UserId(uuid4())
+    raw = uuid4()
+    assert UserId(raw) == UserId(raw)
     assert UserId(uuid4()) != UserId(uuid4())
 
 
 def test_user_id_distinct_from_other_id_types():
-    # Different types must not compare equal even with the same int value.
-    assert UserId(uuid4()) != OrgId(uuid4())
-    assert OrgId(uuid4()) != RoleId(uuid4())
-    assert RoleId(uuid4()) != PermissionId(uuid4())
+    raw = uuid4()
+    # Different wrapper types must not compare equal even with the same UUID.
+    assert UserId(raw) != OrgId(raw)
+    assert OrgId(raw) != RoleId(raw)
+    assert RoleId(raw) != PermissionId(raw)
 
 
 def test_id_value_objects_are_hashable():
-    s = {UserId(uuid4()), UserId(uuid4()), UserId(uuid4())}
-    assert s == {UserId(uuid4()), UserId(uuid4())}
+    a, b = uuid4(), uuid4()
+    s = {UserId(a), UserId(a), UserId(b)}
+    assert s == {UserId(a), UserId(b)}
 
 
 def test_role_name_wraps_string():

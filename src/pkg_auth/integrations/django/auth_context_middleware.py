@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Awaitable, Callable
+from uuid import UUID
 
 from asgiref.sync import iscoroutinefunction
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -20,6 +21,15 @@ class AuthContextMiddleware:
         - identity is None and header present → 401
         - org not found → 404
         - user not a member → 403
+
+    pkg_auth deliberately does NOT bake in a "platform admin fallback"
+    here. Platform-admin detection is a *service-level* policy: services
+    that want it call :func:`pkg_auth.authorization.is_platform_context`
+    inside views, comparing the request's ``AuthContext.organization_id``
+    against their own cached platform org id. Services that need to
+    *resolve* the caller against a platform org when they aren't a
+    member of the requested org can subclass this middleware and
+    intercept the ``NotAMember`` branch themselves.
     """
 
     sync_capable = False
@@ -56,9 +66,11 @@ class AuthContextMiddleware:
             full_name=identity.full_name,
         )
 
-        if raw.isdigit():
-            org = await registry.organization_repo.get(OrgId(int(raw)))
-        else:
+        # Accept UUID or slug. The package switched to UUID PKs in v1.2;
+        # the legacy isdigit() fast-path is gone.
+        try:
+            org = await registry.organization_repo.get(OrgId(UUID(raw)))
+        except (ValueError, AttributeError):
             org = await registry.organization_repo.get_by_slug(raw)
         if org is None:
             return JsonResponse(

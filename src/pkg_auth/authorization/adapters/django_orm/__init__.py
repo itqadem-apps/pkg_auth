@@ -27,4 +27,11 @@ except ImportError as exc:  # pragma: no cover
 
 default_app_config = "pkg_auth.authorization.adapters.django_orm.apps.PkgAuthAclConfig"
 
+# NOTE: do NOT import .mixins or .models from this __init__. Django needs
+# the apps registry to be ready before any ``models.Model`` subclass can
+# be defined, and __init__.py runs during app loading. Consumers should
+# import the abstract mixins directly:
+#
+#     from pkg_auth.authorization.adapters.django_orm.mixins import UserMixin
+
 __all__ = ["default_app_config"]
