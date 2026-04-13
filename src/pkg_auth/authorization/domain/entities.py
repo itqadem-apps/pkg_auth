@@ -1,8 +1,11 @@
 """Authorization domain entities.
 
 All entities are frozen dataclasses with slots. They are loaded from the
-ACL database by the SQLAlchemy / Django ORM repositories and treated as
-immutable snapshots.
+central ACL database by the SQLAlchemy / Django ORM repositories and
+treated as immutable snapshots. The entities are schema-agnostic — the
+concrete ``db_table`` / ``__tablename__`` values live in the adapter
+layer, and consuming services that extend the ACL tables (Mode B) pick
+their own schema and table names via the mixin pattern.
 """
 from __future__ import annotations
 
@@ -23,7 +26,7 @@ from .value_objects import (
 
 @dataclass(frozen=True, slots=True)
 class User:
-    """A row from ``acl.users``.
+    """A row from the ``users`` table.
 
     The package owns the users table; rows are upserted lazily on the
     first JWT seen by ``SyncUserFromJwtUseCase``. ``keycloak_sub`` is
@@ -40,7 +43,7 @@ class User:
 
 @dataclass(frozen=True, slots=True)
 class Organization:
-    """A row from ``acl.organizations``."""
+    """A row from the ``organizations`` table."""
 
     id: OrgId
     slug: str
@@ -50,7 +53,7 @@ class Organization:
 
 @dataclass(frozen=True, slots=True)
 class Permission:
-    """A row from ``acl.permissions`` (the global permission catalog).
+    """A row from the ``permissions`` table (the global permission catalog).
 
     Each downstream service registers its own permission keys on boot
     via ``RegisterPermissionCatalogUseCase``. ``is_platform`` marks
@@ -68,7 +71,7 @@ class Permission:
 
 @dataclass(frozen=True, slots=True)
 class Role:
-    """A row from ``acl.roles``.
+    """A row from the ``roles`` table.
 
     ``organization_id`` is ``None`` for global role templates that can
     be reused across organizations. ``permission_keys`` is the
@@ -85,7 +88,7 @@ class Role:
 
 @dataclass(frozen=True, slots=True)
 class Membership:
-    """A row from ``acl.memberships``.
+    """A row from the ``memberships`` table.
 
     ``role_name`` is denormalized from the joined role for cheap
     construction of an :class:`AuthContext` without re-querying. A user

@@ -1,12 +1,34 @@
 """Default concrete ORM models for the ACL schema (UUID PKs).
 
-These models use ``AclBase`` (schema ``"acl"``) and are ready to use
-out of the box for services that don't need to extend the tables. They
-inherit ACL columns from the mixins in ``mixins.py``.
+.. warning::
+   **Mode A only.** These concrete ``*ORM`` classes inherit from
+   ``AclBase`` — whose ``MetaData`` is hardcoded to the ``acl``
+   Postgres schema — and reference each other via
+   ``ForeignKey("acl.<table>.id", ...)`` strings. They are ready to
+   use out of the box for *consuming* services that adopt the
+   bundled Alembic migrations verbatim.
 
-Services that need extra columns (like itq_users) should NOT import
-these. Instead, they create their own concrete models by inheriting
-from their own ``DeclarativeBase`` + the mixins.
+   **Do NOT import any class from this module into a Mode B service**
+   (one that extends the mixins to add service-specific columns, e.g.
+   ``itq_users``). Mode B services live in their own schema (typically
+   ``public``) and define their own concrete models. Accidentally
+   importing ``UserORM`` / ``OrganizationORM`` / … here pulls in
+   ``AclBase``'s schema binding, and ``metadata.create_all()`` will
+   create duplicate ``acl.*`` tables alongside the service's real
+   ``public.*`` ones.
+
+   Mode B services must:
+
+   - Import the abstract column mixins from
+     ``pkg_auth.authorization.adapters.sqlalchemy.mixins`` (NOT from
+     this module or ``base.py``)
+   - Define their own concrete ``*ORM`` classes against their own
+     ``DeclarativeBase``
+   - Write their own Alembic migrations (not ``alembic upgrade
+     pkg_auth_acl@head``)
+
+   See ``docs/Django.md`` and the v1.4 CHANGELOG for the Mode A vs
+   Mode B distinction.
 """
 from __future__ import annotations
 

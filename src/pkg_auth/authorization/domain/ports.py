@@ -34,7 +34,7 @@ PermissionScope = Literal["org", "platform", "all"]
 
 
 class UserRepository(Protocol):
-    """Read/write access to ``acl.users``.
+    """Read/write access to the ``users`` table.
 
     The package lazily upserts users on first JWT sight via
     :meth:`upsert_from_identity`; explicit creation is not exposed.
@@ -52,7 +52,7 @@ class UserRepository(Protocol):
 
 
 class OrganizationRepository(Protocol):
-    """Read/write access to ``acl.organizations``."""
+    """Read/write access to the ``organizations`` table."""
 
     async def get(self, org_id: OrgId) -> Organization | None: ...
     async def get_by_slug(self, slug: str) -> Organization | None: ...
@@ -65,7 +65,7 @@ class OrganizationRepository(Protocol):
 
 
 class RoleRepository(Protocol):
-    """Read/write access to ``acl.roles`` (and the ``role_permissions`` join)."""
+    """Read/write access to the ``roles`` table (and the ``role_permissions`` join)."""
 
     async def get(self, role_id: RoleId) -> Role | None: ...
     async def get_by_name(
@@ -91,7 +91,7 @@ class RoleRepository(Protocol):
 
 
 class MembershipRepository(Protocol):
-    """Read/write access to ``acl.memberships``.
+    """Read/write access to the ``memberships`` table.
 
     The hot path is :meth:`load_auth_context`, which the FastAPI / Django /
     Strawberry deps call on every protected request. SQLAlchemy / Django
@@ -119,7 +119,7 @@ class MembershipRepository(Protocol):
 
 
 class PermissionCatalogRepository(Protocol):
-    """Read/write access to ``acl.permissions`` (the global perm catalog).
+    """Read/write access to the ``permissions`` table (the global perm catalog).
 
     The ``scope`` argument on the list methods filters by the
     ``is_platform`` flag on each catalog row:

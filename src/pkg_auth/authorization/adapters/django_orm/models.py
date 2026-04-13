@@ -1,14 +1,30 @@
 """Default concrete Django ORM mirror models for the ACL schema (UUID PKs).
 
-These models declare ``Meta.managed = False`` because the schema is owned
-by the SQLAlchemy adapter's Alembic migrations. The ``db_table`` values
-include the ``acl.`` schema prefix using Django's ``'schema"."table'``
-quoting trick so queries hit the right schema.
+.. warning::
+   **Mode A only.** These models declare ``Meta.managed = False`` and
+   hardcode ``db_table = 'acl"."<table>'`` so queries hit the ``acl``
+   Postgres schema created by the SQLAlchemy adapter's bundled Alembic
+   migrations.
 
-Services that need to extend the ACL tables with their own columns
-should NOT import these. Instead, they create their own concrete models
-inheriting from the abstract mixins in ``mixins.py`` and own the
-schema (managed=True) themselves.
+   **Do NOT import any class from this module into a Mode B service**
+   (one that extends the mixins to add service-specific columns, e.g.
+   a Django version of ``itq_users``). Mode B services live in their
+   own schema (typically ``public``), own their own migrations with
+   ``Meta.managed = True``, and define their own concrete models.
+
+   Mode B services must:
+
+   - Import the abstract column mixins from
+     ``pkg_auth.authorization.adapters.django_orm.mixins`` (NOT from
+     this module)
+   - Define their own concrete models with their own ``db_table``
+     (no schema prefix) and ``Meta.managed = True``
+   - Run their own ``manage.py migrate`` (not ``alembic upgrade``)
+   - Inject their concrete model classes into the package repos via
+     ``DjangoUserRepository(model=MyUser)`` etc.
+
+   See ``docs/Django.md`` and the v1.4 CHANGELOG for the Mode A vs
+   Mode B distinction.
 """
 from __future__ import annotations
 
