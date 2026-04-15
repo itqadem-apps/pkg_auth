@@ -1,34 +1,31 @@
-"""Default concrete ORM models for the ACL schema (UUID PKs).
+"""Default concrete ORM models for the bundled ACL (UUID PKs).
 
 .. warning::
-   **Mode A only.** These concrete ``*ORM`` classes inherit from
-   ``AclBase`` — whose ``MetaData`` is hardcoded to the ``acl``
-   Postgres schema — and reference each other via
-   ``ForeignKey("acl.<table>.id", ...)`` strings. They are ready to
-   use out of the box for *consuming* services that adopt the
-   bundled Alembic migrations verbatim.
+   **Mode B only.** These concrete ``*ORM`` classes inherit from
+   ``AclBase`` — the bundled declarative base whose ``MetaData``
+   emits unqualified table names (resolving via the database
+   ``search_path``). They are ready to use out of the box for
+   *consuming* services (Mode B) that point their own sessionmaker
+   at the shared ACL database.
 
-   **Do NOT import any class from this module into a Mode B service**
+   **Do NOT import any class from this module into a Mode A service**
    (one that extends the mixins to add service-specific columns, e.g.
-   ``itq_users``). Mode B services live in their own schema (typically
-   ``public``) and define their own concrete models. Accidentally
-   importing ``UserORM`` / ``OrganizationORM`` / … here pulls in
-   ``AclBase``'s schema binding, and ``metadata.create_all()`` will
-   create duplicate ``acl.*`` tables alongside the service's real
-   ``public.*`` ones.
+   ``itq_users``). Mode A services own the ACL schema and define
+   their own concrete models against their own ``DeclarativeBase``.
+   Accidentally importing ``UserORM`` / ``OrganizationORM`` / … into
+   a Mode A service splits its models across two metadata objects
+   and breaks ``metadata.create_all`` / migration tooling.
 
-   Mode B services must:
+   Mode A services must:
 
    - Import the abstract column mixins from
      ``pkg_auth.authorization.adapters.sqlalchemy.mixins`` (NOT from
      this module or ``base.py``)
    - Define their own concrete ``*ORM`` classes against their own
      ``DeclarativeBase``
-   - Write their own Alembic migrations (not ``alembic upgrade
-     pkg_auth_acl@head``)
+   - Write their own Alembic migrations
 
-   See ``docs/Django.md`` and the v1.4 CHANGELOG for the Mode A vs
-   Mode B distinction.
+   See ``docs/Django.md`` for the Mode A vs Mode B distinction.
 """
 from __future__ import annotations
 
@@ -116,7 +113,7 @@ class RoleORM(AclBase, RoleMixin):
     )
     organization_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.organizations.id", ondelete="CASCADE"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
         index=True,
     )
 
@@ -124,7 +121,7 @@ class RoleORM(AclBase, RoleMixin):
         back_populates="roles"
     )
     permissions: Mapped[list[PermissionORM]] = relationship(
-        secondary="acl.role_permissions"
+        secondary="role_permissions"
     )
     memberships: Mapped[list["MembershipORM"]] = relationship(
         back_populates="role"
@@ -136,12 +133,12 @@ class RolePermissionORM(AclBase):
 
     role_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.roles.id", ondelete="CASCADE"),
+        ForeignKey("roles.id", ondelete="CASCADE"),
         primary_key=True,
     )
     permission_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.permissions.id", ondelete="CASCADE"),
+        ForeignKey("permissions.id", ondelete="CASCADE"),
         primary_key=True,
     )
 
@@ -162,17 +159,17 @@ class MembershipORM(AclBase, MembershipMixin):
     )
     user_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="CASCADE"),
         index=True,
     )
     organization_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.organizations.id", ondelete="CASCADE"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
         index=True,
     )
     role_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.roles.id", ondelete="RESTRICT"),
+        ForeignKey("roles.id", ondelete="RESTRICT"),
         index=True,
     )
     status: Mapped[str] = mapped_column(String(32), server_default="active")
@@ -194,17 +191,17 @@ class MembershipInvitationORM(AclBase):
     )
     organization_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.organizations.id", ondelete="CASCADE"),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
     )
     email: Mapped[str] = mapped_column(String(255), index=True)
     role_id: Mapped[UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.roles.id", ondelete="RESTRICT"),
+        ForeignKey("roles.id", ondelete="RESTRICT"),
     )
     token: Mapped[str] = mapped_column(String(64), unique=True)
     invited_by_user_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="SET NULL"),
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -223,7 +220,7 @@ class AuthAuditLogORM(AclBase):
     )
     actor_user_id: Mapped[UUID | None] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("acl.users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="SET NULL"),
         index=True,
     )
     action: Mapped[str] = mapped_column(String(128), index=True)

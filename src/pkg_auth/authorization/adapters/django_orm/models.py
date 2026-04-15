@@ -1,30 +1,30 @@
-"""Default concrete Django ORM mirror models for the ACL schema (UUID PKs).
+"""Default concrete Django ORM mirror models for the ACL (UUID PKs).
 
 .. warning::
-   **Mode A only.** These models declare ``Meta.managed = False`` and
-   hardcode ``db_table = 'acl"."<table>'`` so queries hit the ``acl``
-   Postgres schema created by the SQLAlchemy adapter's bundled Alembic
-   migrations.
+   **Mode B only.** These models declare ``Meta.managed = False`` and
+   map to the default ACL table names (``users``, ``organizations``,
+   …) so consuming services (Mode B) can read the shared ACL tables
+   via Django's ORM without owning the schema. The schema is owned
+   by the source-of-truth service.
 
-   **Do NOT import any class from this module into a Mode B service**
+   **Do NOT import any class from this module into a Mode A service**
    (one that extends the mixins to add service-specific columns, e.g.
-   a Django version of ``itq_users``). Mode B services live in their
-   own schema (typically ``public``), own their own migrations with
-   ``Meta.managed = True``, and define their own concrete models.
+   a Django version of ``itq_users``). Mode A services own the ACL
+   schema, run their own migrations with ``Meta.managed = True``, and
+   define their own concrete models.
 
-   Mode B services must:
+   Mode A services must:
 
    - Import the abstract column mixins from
      ``pkg_auth.authorization.adapters.django_orm.mixins`` (NOT from
      this module)
-   - Define their own concrete models with their own ``db_table``
-     (no schema prefix) and ``Meta.managed = True``
+   - Define their own concrete models with their own ``db_table`` and
+     ``Meta.managed = True``
    - Run their own ``manage.py migrate`` (not ``alembic upgrade``)
    - Inject their concrete model classes into the package repos via
      ``DjangoUserRepository(model=MyUser)`` etc.
 
-   See ``docs/Django.md`` and the v1.4 CHANGELOG for the Mode A vs
-   Mode B distinction.
+   See ``docs/Django.md`` for the Mode A vs Mode B distinction.
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class User(UserMixin):
 
     class Meta:
         managed = False
-        db_table = 'acl"."users'
+        db_table = "users"
         app_label = "pkg_auth_acl"
 
 
@@ -55,7 +55,7 @@ class Organization(OrganizationMixin):
 
     class Meta:
         managed = False
-        db_table = 'acl"."organizations'
+        db_table = "organizations"
         app_label = "pkg_auth_acl"
 
 
@@ -64,7 +64,7 @@ class Permission(PermissionMixin):
 
     class Meta:
         managed = False
-        db_table = 'acl"."permissions'
+        db_table = "permissions"
         app_label = "pkg_auth_acl"
 
 
@@ -86,7 +86,7 @@ class Role(RoleMixin):
 
     class Meta:
         managed = False
-        db_table = 'acl"."roles'
+        db_table = "roles"
         app_label = "pkg_auth_acl"
         unique_together = (("organization", "name"),)
 
@@ -107,7 +107,7 @@ class RolePermission(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'acl"."role_permissions'
+        db_table = "role_permissions"
         app_label = "pkg_auth_acl"
         unique_together = (("role", "permission"),)
 
@@ -143,7 +143,7 @@ class Membership(MembershipMixin):
 
     class Meta:
         managed = False
-        db_table = 'acl"."memberships'
+        db_table = "memberships"
         app_label = "pkg_auth_acl"
         unique_together = (("user", "organization", "role"),)
 
@@ -174,7 +174,7 @@ class MembershipInvitation(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'acl"."membership_invitations'
+        db_table = "membership_invitations"
         app_label = "pkg_auth_acl"
 
 
@@ -195,5 +195,5 @@ class AuthAuditLog(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'acl"."auth_audit_log'
+        db_table = "auth_audit_log"
         app_label = "pkg_auth_acl"

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable
+from uuid import UUID
 
 from starlette.requests import Request
 
@@ -90,9 +91,9 @@ def make_context_getter(
             full_name=ctx.identity.full_name,
         )
 
-        if raw.isdigit():
-            org = await organization_repo.get(OrgId(int(raw)))
-        else:
+        try:
+            org = await organization_repo.get(OrgId(UUID(raw)))
+        except ValueError:
             org = await organization_repo.get_by_slug(raw)
         if org is None:
             return ctx

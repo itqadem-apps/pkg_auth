@@ -4,8 +4,8 @@ All entities are frozen dataclasses with slots. They are loaded from the
 central ACL database by the SQLAlchemy / Django ORM repositories and
 treated as immutable snapshots. The entities are schema-agnostic — the
 concrete ``db_table`` / ``__tablename__`` values live in the adapter
-layer, and consuming services that extend the ACL tables (Mode B) pick
-their own schema and table names via the mixin pattern.
+layer, and source-of-truth services that extend the ACL tables (Mode A)
+pick their own schema and table names via the mixin pattern.
 """
 from __future__ import annotations
 

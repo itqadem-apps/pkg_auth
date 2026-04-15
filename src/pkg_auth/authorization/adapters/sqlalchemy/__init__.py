@@ -1,13 +1,14 @@
-"""SQLAlchemy adapter for the ACL schema (canonical schema owner via Alembic).
+"""SQLAlchemy adapter for the ACL tables.
 
 Importing this module requires SQLAlchemy and asyncpg to be installed:
 
     pip install pkg-auth[acl-sqlalchemy]
 
-The module exposes ``MIGRATIONS_DIR`` so consuming services (notably the
-users service) can register the version files via Alembic's
-``version_locations`` mechanism. See ``docs/Authorization.md`` for the
-wiring pattern.
+The module exposes ``MIGRATIONS_DIR`` so the source-of-truth service
+can register the bundled version files via Alembic's
+``version_locations`` mechanism as a starting point — Mode A services
+typically evolve the schema further via their own migrations from
+that point on. See ``docs/Authorization.md`` for the wiring pattern.
 """
 from __future__ import annotations
 

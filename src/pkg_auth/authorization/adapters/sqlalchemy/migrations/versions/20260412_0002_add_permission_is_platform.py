@@ -1,13 +1,13 @@
-"""Add is_platform flag to acl.permissions.
+"""Add is_platform flag to permissions.
 
 Revision ID: pkg_auth_acl_0002
 Revises: pkg_auth_acl_0001
 Create Date: 2026-04-12 00:00:00.000000
 
-Adds the ``is_platform`` boolean column introduced in pkg_auth v1.4 so
-the central ACL UI can filter platform-only permissions out of org-scoped
-role builders. Defaults to ``false`` so existing rows remain valid and
-backwards-compatible 2-tuple registration calls keep working.
+Adds the ``is_platform`` boolean column so the central ACL UI can
+filter platform-only permissions out of org-scoped role builders.
+Defaults to ``false`` so existing rows remain valid and backwards-
+compatible 2-tuple registration calls keep working.
 """
 from __future__ import annotations
 
@@ -32,9 +32,8 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("false"),
         ),
-        schema="acl",
     )
 
 
 def downgrade() -> None:
-    op.drop_column("permissions", "is_platform", schema="acl")
+    op.drop_column("permissions", "is_platform")

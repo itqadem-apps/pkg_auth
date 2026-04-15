@@ -12,25 +12,26 @@ about JWTs beyond mounting the middleware.
 
 There are two ways a Django service can integrate.
 
-### Mode A — Consuming service (read-only mirror)
+### Mode A — Source-of-truth service (owns the schema)
 
-The service shares the central ACL database with the source-of-truth
-service (e.g. `itq_users`). It does **not** own the ACL schema —
-Alembic migrations from the SoT service create the tables, and this
-service just reads them via Django ORM mirror models with
-`Meta.managed = False`. This is the default and the simplest setup.
+The service owns the ACL tables and adds its own columns to one or
+more of them (e.g. `itq_users` adds `username`, `bio`, `status` to
+the `users` table). It subclasses the abstract mixins, declares its
+own concrete models with `Meta.managed = True`, and runs its own
+Django migrations. Typically one service in the fleet is the SoT.
 
-### Mode B — Source-of-truth service (extends the schema)
+### Mode B — Consuming service (read-only mirror)
 
-The service owns the ACL schema and adds its own columns to one or
-more ACL tables (e.g. `itq_users` adds `username`, `bio`, `status` to
-the `users` table). It subclasses the abstract mixins, declares its own
-concrete models with `Meta.managed = True`, and runs its own Django
-migrations.
+The service shares the ACL database with the source-of-truth
+service (e.g. `itq_users`). It does **not** own the ACL tables —
+the SoT's migrations create them, and this service just reads them
+via Django ORM mirror models with `Meta.managed = False`. This is
+the default and simplest setup for any service that isn't the SoT.
 
-Use Mode A unless you have a concrete reason to extend.
+Use Mode B unless your service is the source-of-truth for the ACL
+tables.
 
-## Setup (Mode A — consuming)
+## Setup (Mode B — consuming)
 
 ### 1. Install
 
@@ -280,10 +281,11 @@ async for role in Role.objects.filter(organization_id=org_id):
 The schema is owned by Alembic (from the SQLAlchemy adapter). Django's
 `makemigrations` will not generate migrations for these models.
 
-## Setup (Mode B — extending the schema)
+## Setup (Mode A — source-of-truth, extending the schema)
 
-If your Django service needs to add columns to an ACL table (the
-`itq_users` pattern: `username`, `bio`, `status` on `users`):
+If your Django service is the source-of-truth for the ACL tables and
+needs to add columns to one or more of them (the `itq_users` pattern:
+`username`, `bio`, `status` on `users`):
 
 ### 1. Subclass the abstract mixin
 
@@ -332,9 +334,10 @@ queries — no monkey-patching, no fork.
 
 ### 3. Own the schema with Django migrations
 
-In Mode B, your service runs `makemigrations` / `migrate` for the
-extended models. The package's bundled Alembic migrations are unused
-in this mode — your Django migrations are the authoritative source.
+In Mode A, your service runs `makemigrations` / `migrate` for the
+ACL tables. The package's bundled Alembic migrations are a starting
+point only — once you take ownership your Django migrations are the
+authoritative source.
 
 ## Strawberry GraphQL services
 
@@ -398,14 +401,13 @@ unless `is_platform_context(auth_ctx, get_platform_org_id())` returns
 - **`role_name` AttributeError** on `AuthContext` — that field was
   renamed to `role_names: frozenset[str]` in v1.3 (multi-role per
   org). Use `auth_ctx.role_names` or `auth_ctx.has_role("editor")`.
-- **Permission catalog `is_platform` column missing** — apply the v1.4
-  Alembic migration (`pkg_auth_acl_0002_add_permission_is_platform`)
+- **Permission catalog `is_platform` column missing** — apply the
+  bundled Alembic migration (`pkg_auth_acl_0002_add_permission_is_platform`)
   or add the column manually:
   ```python
   op.add_column("permissions",
       sa.Column("is_platform", sa.Boolean(), nullable=False,
-                server_default=sa.text("false")),
-      schema="acl")
+                server_default=sa.text("false")))
   ```
 - **Role permissions empty after `RoleRepository.create(...)`** —
   the consuming service must register its permission catalog

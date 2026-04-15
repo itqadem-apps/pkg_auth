@@ -3,6 +3,63 @@
 All notable changes to `pkg-auth` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] — 2026-04-15
+
+### Breaking — Mode A and Mode B labels swapped
+
+The two integration modes now match the naming used in the Engram
+`pkg_auth Integration Guide` playbook and across the rest of the
+itqadem fleet:
+
+- **Mode A = Source-of-truth service** (extends the mixins, owns the
+  ACL schema, runs its own migrations). `itq_users` is the canonical
+  Mode A service.
+- **Mode B = Consuming service** (reads the shared ACL tables via the
+  bundled `*ORM` / mirror classes, no schema ownership). Services like
+  `itq_courses` are Mode B.
+
+Previous releases had the labels inverted in `docs/Django.md`, the
+adapter docstrings, `src/pkg_auth/authorization/domain/entities.py`,
+and the Alembic migration file names. All of those now match the
+Engram convention. Any code or docs referencing "Mode A / Mode B"
+from earlier versions must swap the labels.
+
+### Breaking — bundled ACL tables no longer default to the `acl` schema
+
+- `create_acl_base(schema=None)` is the new default (was `"acl"`).
+  `AclBase` now emits unqualified table names, so Postgres resolves
+  them via `search_path` — typically `public`, matching where the
+  canonical SoT service (`itq_users`) already keeps the ACL tables.
+- `src/pkg_auth/authorization/adapters/sqlalchemy/models.py` — the
+  bundled `*ORM` classes dropped all `"acl.<table>.id"` FK string
+  prefixes. They now reference unqualified names.
+- `src/pkg_auth/authorization/adapters/django_orm/models.py` — the
+  `managed=False` mirror models dropped the `acl"."` prefix on every
+  `db_table`.
+- Alembic migration `pkg_auth_acl_0001` renamed from
+  `20260410_0001_initial_acl_schema.py` to `20260410_0001_initial_schema.py`.
+  The migration no longer runs `CREATE SCHEMA acl` and no longer
+  passes `schema="acl"` to any `op.create_table` / `op.create_index`
+  / `op.drop_table` call.
+- Alembic migration `pkg_auth_acl_0002_add_permission_is_platform`
+  dropped `schema="acl"` from its `op.add_column` / `op.drop_column`.
+
+Mode A services on previous versions that followed the bundled
+migrations have their tables in the `acl` Postgres schema. They need
+a one-off migration to move them into `public` (or their preferred
+default schema) before upgrading — consult the SoT service's own
+migration history (`itq_users` shipped
+`a0b1c2d3e4f5_add_acl_tables_drop_acl_schema.py` for this purpose).
+
+### Fixed — Strawberry integration parses `X-Organization-Id` the same way as FastAPI/Django
+
+`src/pkg_auth/integrations/strawberry/auth.py` previously used a
+legacy `raw.isdigit()` BIGINT fast-path that called
+`OrgId(int(raw))`, which is unreachable code because `OrgId` wraps
+`UUID`, not `int`. Replaced with a UUID-first parse that falls back
+to slug lookup — matching the FastAPI `auth_context_dep` and Django
+`AuthContextMiddleware` implementations.
+
 ## [1.4.0] — 2026-04-12
 
 ### Added — `is_platform` permission scope
