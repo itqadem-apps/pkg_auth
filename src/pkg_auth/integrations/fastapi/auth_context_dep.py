@@ -2,8 +2,21 @@
 
 Composes ``Authentication.get_identity`` (from the authentication
 module) with the authorization layer's ``ResolveAuthContextUseCase``,
-``SyncUserFromJwtUseCase``, and ``OrganizationRepository`` to produce a
-single FastAPI dependency that returns ``(IdentityContext, AuthContext)``.
+either ``SyncUserFromJwtUseCase`` (Mode A — writer) or
+``ResolveUserFromJwtUseCase`` (Mode B — reader), and
+``OrganizationRepository`` to produce a single FastAPI dependency that
+returns ``(IdentityContext, AuthContext)``.
+
+Exactly one of ``sync_user_use_case`` / ``resolve_user_use_case`` must
+be supplied:
+
+- **Mode A** (source-of-truth, extends the ACL schema): pass
+  ``sync_user_use_case=...`` — the dep will upsert the local user row
+  from JWT claims on every request.
+- **Mode B** (consumer, ACL DB is owned by a Mode A peer): pass
+  ``resolve_user_use_case=...`` — the dep will read-through and raise
+  ``UserNotProvisioned`` (→ HTTP 403) if the source-of-truth hasn't
+  mirrored the user yet.
 
 pkg_auth deliberately does NOT bake in a "platform admin fallback"
 here. Platform-admin detection is a *service-level* policy: services
@@ -28,13 +41,18 @@ from ...authorization import (
     NotAMember,
     OrgId,
     UnknownOrganization,
+    UserNotProvisioned,
 )
 from ...authorization.application.use_cases.resolve_auth_context import (
     ResolveAuthContextUseCase,
 )
+from ...authorization.application.use_cases.resolve_user_from_jwt import (
+    ResolveUserFromJwtUseCase,
+)
 from ...authorization.application.use_cases.sync_user_from_jwt import (
     SyncUserFromJwtUseCase,
 )
+from ...authorization.domain.entities import User
 from ...authorization.domain.ports import OrganizationRepository
 
 DEFAULT_HEADER_NAME = "X-Organization-Id"
@@ -43,25 +61,36 @@ DEFAULT_HEADER_NAME = "X-Organization-Id"
 def make_get_auth_context(
     *,
     get_identity: Callable[..., Awaitable[IdentityContext]],
-    sync_user_use_case: SyncUserFromJwtUseCase,
     resolve_use_case: ResolveAuthContextUseCase,
     organization_repo: OrganizationRepository,
+    sync_user_use_case: SyncUserFromJwtUseCase | None = None,
+    resolve_user_use_case: ResolveUserFromJwtUseCase | None = None,
     header_name: str = DEFAULT_HEADER_NAME,
 ) -> Callable[..., Awaitable[tuple[IdentityContext, AuthContext]]]:
     """Build a FastAPI dependency returning ``(IdentityContext, AuthContext)``.
 
+    Exactly one of ``sync_user_use_case`` or ``resolve_user_use_case``
+    must be supplied. See the module docstring for when to use each.
+
     The dependency:
         1. Resolves identity via the injected ``get_identity``.
-        2. Lazily upserts the local user row from JWT claims.
+        2. Either lazily upserts the local user row from JWT claims
+           (Mode A) or reads it through and 403s if missing (Mode B).
         3. Reads ``header_name`` from the request and parses it as a
            UUID first, falling back to a slug lookup.
         4. Resolves the user's auth context for that organization.
 
     Errors map to:
-        - missing header             → 400
-        - unknown organization       → 404
-        - user not a member          → 403
+        - missing header                → 400
+        - unknown organization          → 404
+        - user not a member             → 403
+        - user not provisioned (Mode B) → 403
     """
+    if (sync_user_use_case is None) == (resolve_user_use_case is None):
+        raise ValueError(
+            "make_get_auth_context: pass exactly one of "
+            "sync_user_use_case (Mode A) or resolve_user_use_case (Mode B)."
+        )
 
     async def dependency(
         request: Request,
@@ -74,11 +103,24 @@ def make_get_auth_context(
                 detail=f"Missing {header_name} header",
             )
 
-        user = await sync_user_use_case.execute(
-            sub=identity.subject_str,
-            email=identity.email_str or "",
-            full_name=identity.full_name,
-        )
+        user: User
+        try:
+            if sync_user_use_case is not None:
+                user = await sync_user_use_case.execute(
+                    sub=identity.subject_str,
+                    email=identity.email_str or "",
+                    full_name=identity.full_name,
+                )
+            else:
+                assert resolve_user_use_case is not None
+                user = await resolve_user_use_case.execute(
+                    sub=identity.subject_str,
+                )
+        except UserNotProvisioned as exc:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(exc),
+            ) from exc
 
         try:
             org = await organization_repo.get(OrgId(UUID(raw)))

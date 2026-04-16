@@ -7,7 +7,13 @@ from uuid import UUID
 from asgiref.sync import iscoroutinefunction
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
-from ...authorization import NotAMember, OrgId, UnknownOrganization
+from ...authorization import (
+    NotAMember,
+    OrgId,
+    UnknownOrganization,
+    UserNotProvisioned,
+)
+from ...authorization.domain.entities import User
 from .install import get_registry
 
 
@@ -60,11 +66,21 @@ class AuthContextMiddleware:
                 {"detail": "Not authenticated"}, status=401,
             )
 
-        user = await registry.sync_user.execute(
-            sub=identity.subject_str,
-            email=identity.email_str or "",
-            full_name=identity.full_name,
-        )
+        user: User
+        try:
+            if registry.sync_user is not None:
+                user = await registry.sync_user.execute(
+                    sub=identity.subject_str,
+                    email=identity.email_str or "",
+                    full_name=identity.full_name,
+                )
+            else:
+                assert registry.resolve_user is not None
+                user = await registry.resolve_user.execute(
+                    sub=identity.subject_str,
+                )
+        except UserNotProvisioned as exc:
+            return JsonResponse({"detail": str(exc)}, status=403)
 
         # Accept UUID or slug. The package switched to UUID PKs in v1.2;
         # the legacy isdigit() fast-path is gone.

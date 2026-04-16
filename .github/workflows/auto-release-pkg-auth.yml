@@ -1,4 +1,4 @@
-name: Auto Release pkg_auth (minor)
+name: Auto Release pkg_auth
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release:
-    name: Bump minor, tag, release
+    name: Bump, tag, release
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
     steps:
@@ -24,8 +24,36 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Compute next minor version
+      - name: Determine bump level from commit message
+        id: level
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          # Decision order (first match wins):
+          #   1. Conventional Commits breaking marker (`type!:` / `type(scope)!:`)
+          #      OR `BREAKING CHANGE` / `BREAKING-CHANGE` anywhere in the message
+          #      OR explicit `[major]` tag  → major
+          #   2. Conventional Commits `fix:` / `fix(scope):` prefix
+          #      OR explicit `[patch]` tag → patch
+          #   3. Everything else            → minor (default, preserves prior behavior)
+          HEADER=$(printf '%s' "$MSG" | head -n1)
+          LEVEL=minor
+          if printf '%s' "$MSG" | grep -qE '(^|[[:space:]])BREAKING[- ]CHANGE' \
+             || printf '%s' "$MSG" | grep -qE '(^|[[:space:]])\[major\]([[:space:]]|$)' \
+             || printf '%s' "$HEADER" | grep -qE '^[a-z]+(\([^)]*\))?!:'; then
+            LEVEL=major
+          elif printf '%s' "$MSG" | grep -qE '(^|[[:space:]])\[patch\]([[:space:]]|$)' \
+             || printf '%s' "$HEADER" | grep -qE '^fix(\([^)]*\))?:'; then
+            LEVEL=patch
+          fi
+          echo "level=$LEVEL" >> "$GITHUB_OUTPUT"
+          echo "Bump level: $LEVEL (header: $HEADER)"
+
+      - name: Compute next version
         id: version
+        env:
+          LEVEL: ${{ steps.level.outputs.level }}
         run: |
           set -euo pipefail
           # Extract version from file at repo root
@@ -34,35 +62,59 @@ jobs:
           # Latest tag matching pkg_auth
           LATEST_TAG=$(git tag -l 'pkg_auth-v*' | sed -E 's/^pkg_auth-v//' | sort -V | tail -n1 || true)
 
-          # Choose baseline = max(FILE_VER, LATEST_TAG)
-          BASELINE=$(printf '%s\n%s\n' "$FILE_VER" "$LATEST_TAG" | sed '/^$/d' | sort -V | tail -n1)
-          if [ -z "$BASELINE" ]; then
-            echo "No baseline version found; defaulting to 0.1.0" >&2
-            BASELINE="0.1.0"
+          # If the committer manually bumped pyproject.toml past the latest
+          # tag, honor that version as the release target (no further bump).
+          # This lets a human drive major releases by editing the file —
+          # auto-bump only kicks in when file == tag (the normal
+          # post-auto-release steady state).
+          if [ -n "$FILE_VER" ] && [ -n "$LATEST_TAG" ] \
+             && [ "$(printf '%s\n%s\n' "$FILE_VER" "$LATEST_TAG" | sort -V | tail -n1)" = "$FILE_VER" ] \
+             && [ "$FILE_VER" != "$LATEST_TAG" ]; then
+            NEW_VER="$FILE_VER"
+            BASELINE="$LATEST_TAG"
+            MODE="honor-manual-bump"
+          else
+            # Normal flow: baseline = max(FILE_VER, LATEST_TAG), then bump.
+            BASELINE=$(printf '%s\n%s\n' "$FILE_VER" "$LATEST_TAG" | sed '/^$/d' | sort -V | tail -n1)
+            if [ -z "$BASELINE" ]; then
+              echo "No baseline version found; defaulting to 0.1.0" >&2
+              BASELINE="0.1.0"
+            fi
+            MAJOR=$(echo "$BASELINE" | awk -F. '{print $1}')
+            MINOR=$(echo "$BASELINE" | awk -F. '{print $2}')
+            PATCH=$(echo "$BASELINE" | awk -F. '{print $3}' | sed 's/[^0-9].*$//')
+            if ! [[ $MAJOR =~ ^[0-9]+$ && $MINOR =~ ^[0-9]+$ && $PATCH =~ ^[0-9]+$ ]]; then
+              echo "Baseline version not semver-like: $BASELINE" >&2
+              exit 1
+            fi
+            case "$LEVEL" in
+              major) NEW_VER="$((MAJOR + 1)).0.0" ;;
+              minor) NEW_VER="${MAJOR}.$((MINOR + 1)).0" ;;
+              patch) NEW_VER="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+              *)     echo "Unknown level: $LEVEL" >&2; exit 1 ;;
+            esac
+            MODE="auto-$LEVEL"
           fi
 
-          # Parse and bump minor
-          MAJOR=$(echo "$BASELINE" | awk -F. '{print $1}')
-          MINOR=$(echo "$BASELINE" | awk -F. '{print $2}')
-          PATCH=$(echo "$BASELINE" | awk -F. '{print $3}' | sed 's/[^0-9].*$//')
-          if ! [[ $MAJOR =~ ^[0-9]+$ && $MINOR =~ ^[0-9]+$ ]]; then
-            echo "Baseline version not semver-like: $BASELINE" >&2
-            exit 1
-          fi
-          NEW_MINOR=$((MINOR + 1))
-          NEW_VER="${MAJOR}.${NEW_MINOR}.0"
-
-          # Ensure tag uniqueness; bump until free
+          # Ensure tag uniqueness; bump the chosen component until free.
+          # Parse once from NEW_VER to handle both branches uniformly.
+          MAJOR=$(echo "$NEW_VER" | awk -F. '{print $1}')
+          MINOR=$(echo "$NEW_VER" | awk -F. '{print $2}')
+          PATCH=$(echo "$NEW_VER" | awk -F. '{print $3}' | sed 's/[^0-9].*$//')
           while git rev-parse -q --verify "refs/tags/pkg_auth-v${NEW_VER}" >/dev/null; do
-            NEW_MINOR=$((NEW_MINOR + 1))
-            NEW_VER="${MAJOR}.${NEW_MINOR}.0"
+            case "$LEVEL" in
+              major) MAJOR=$((MAJOR + 1)); NEW_VER="${MAJOR}.0.0" ;;
+              patch) PATCH=$((PATCH + 1)); NEW_VER="${MAJOR}.${MINOR}.${PATCH}" ;;
+              *)     MINOR=$((MINOR + 1)); NEW_VER="${MAJOR}.${MINOR}.0" ;;
+            esac
           done
 
           echo "new=$NEW_VER" >> "$GITHUB_OUTPUT"
           echo "baseline=$BASELINE" >> "$GITHUB_OUTPUT"
           echo "file=$FILE_VER" >> "$GITHUB_OUTPUT"
           echo "tag=pkg_auth-v$NEW_VER" >> "$GITHUB_OUTPUT"
-          echo "Next version: $NEW_VER (baseline: $BASELINE)"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Next version: $NEW_VER (mode: $MODE, baseline: $BASELINE, level: $LEVEL, file: $FILE_VER, tag: $LATEST_TAG)"
 
       - name: Update pyproject.toml version
         run: |
@@ -116,10 +168,10 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: pkg_auth v${{ steps.version.outputs.new }}
           body: |
-            Auto release for pkg_auth.
+            Auto release for pkg_auth (mode: ${{ steps.version.outputs.mode }}).
 
             Install directly from the tag:
-            
+
             pip install "git+https://github.com/${{ github.repository }}.git@${{ steps.version.outputs.tag }}"
 
             Or install the wheel directly from the release (public repo):

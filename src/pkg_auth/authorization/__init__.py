@@ -7,7 +7,8 @@ Public API:
     Ports:           UserRepository, OrganizationRepository, RoleRepository,
                      MembershipRepository, PermissionCatalogRepository
     Exceptions:      AuthorizationError, NotAMember, MissingPermission,
-                     UnknownOrganization, UnknownUser, UnknownRole
+                     UnknownOrganization, UnknownUser, UnknownRole,
+                     UserNotProvisioned
 
 The application layer (use cases) is added in M3; SQLAlchemy / Django ORM
 adapters in M4 / M6; cache layer in M5; framework integrations in M7-M9.
@@ -32,6 +33,7 @@ from .domain.exceptions import (
     UnknownPermission,
     UnknownRole,
     UnknownUser,
+    UserNotProvisioned,
 )
 from .domain.ports import (
     MembershipRepository,
@@ -84,4 +86,5 @@ __all__ = [
     "UnknownUser",
     "UnknownRole",
     "UnknownPermission",
+    "UserNotProvisioned",
 ]

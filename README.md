@@ -40,10 +40,12 @@ auth = create_authentication(
     audience="courses-service",
 )
 
-# (wire sync_user_use_case, resolve_use_case, organization_repo from your DI)
+# Mode B (consumer — the common case): pass resolve_user_use_case.
+# Mode A (source-of-truth): pass sync_user_use_case instead. Exactly
+# one of the two is required; passing both raises ValueError.
 get_auth_context = make_get_auth_context(
     get_identity=auth.get_identity,
-    sync_user_use_case=sync_user,
+    resolve_user_use_case=resolve_user,   # or: sync_user_use_case=sync_user (Mode A)
     resolve_use_case=resolve,
     organization_repo=org_repo,
 )

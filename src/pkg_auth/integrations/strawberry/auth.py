@@ -14,13 +14,22 @@ from ...authentication import (
     InvalidTokenError,
     TokenExpiredError,
 )
-from ...authorization import AuthContext, NotAMember, OrgId
+from ...authorization import (
+    AuthContext,
+    NotAMember,
+    OrgId,
+    UserNotProvisioned,
+)
 from ...authorization.application.use_cases.resolve_auth_context import (
     ResolveAuthContextUseCase,
+)
+from ...authorization.application.use_cases.resolve_user_from_jwt import (
+    ResolveUserFromJwtUseCase,
 )
 from ...authorization.application.use_cases.sync_user_from_jwt import (
     SyncUserFromJwtUseCase,
 )
+from ...authorization.domain.entities import User
 from ...authorization.domain.ports import OrganizationRepository
 
 DEFAULT_HEADER_NAME = "X-Organization-Id"
@@ -54,19 +63,29 @@ def _extract_token(request: Request, cookie_name: str) -> str | None:
 def make_context_getter(
     *,
     authenticate_use_case: AuthenticateTokenUseCase,
-    sync_user_use_case: SyncUserFromJwtUseCase,
     resolve_use_case: ResolveAuthContextUseCase,
     organization_repo: OrganizationRepository,
+    sync_user_use_case: SyncUserFromJwtUseCase | None = None,
+    resolve_user_use_case: ResolveUserFromJwtUseCase | None = None,
     header_name: str = DEFAULT_HEADER_NAME,
     cookie_name: str = DEFAULT_COOKIE_NAME,
 ) -> Callable[[Request], Awaitable[StrawberryContext]]:
     """Build an async ``context_getter`` for ``strawberry.fastapi.GraphQLRouter``.
 
-    The returned function is permissive: token errors and missing
-    headers degrade the context fields to ``None`` rather than raising.
-    Permission classes (``IsAuthenticated``, ``RequirePermission``) are
-    responsible for rejecting under-privileged queries.
+    Exactly one of ``sync_user_use_case`` (Mode A — source-of-truth) or
+    ``resolve_user_use_case`` (Mode B — consumer) must be supplied.
+
+    The returned function is permissive: token errors, missing headers,
+    and ``UserNotProvisioned`` degrade the context fields to ``None``
+    rather than raising. Permission classes (``IsAuthenticated``,
+    ``RequirePermission``) are responsible for rejecting under-privileged
+    queries.
     """
+    if (sync_user_use_case is None) == (resolve_user_use_case is None):
+        raise ValueError(
+            "make_context_getter: pass exactly one of "
+            "sync_user_use_case (Mode A) or resolve_user_use_case (Mode B)."
+        )
 
     async def _context_getter(request: Request) -> StrawberryContext:
         ctx = StrawberryContext(request=request)
@@ -85,11 +104,21 @@ def make_context_getter(
         if raw is None:
             return ctx
 
-        user = await sync_user_use_case.execute(
-            sub=ctx.identity.subject_str,
-            email=ctx.identity.email_str or "",
-            full_name=ctx.identity.full_name,
-        )
+        user: User
+        try:
+            if sync_user_use_case is not None:
+                user = await sync_user_use_case.execute(
+                    sub=ctx.identity.subject_str,
+                    email=ctx.identity.email_str or "",
+                    full_name=ctx.identity.full_name,
+                )
+            else:
+                assert resolve_user_use_case is not None
+                user = await resolve_user_use_case.execute(
+                    sub=ctx.identity.subject_str,
+                )
+        except UserNotProvisioned:
+            return ctx
 
         try:
             org = await organization_repo.get(OrgId(UUID(raw)))

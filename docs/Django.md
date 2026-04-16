@@ -60,8 +60,8 @@ from pkg_auth.authorization.adapters.django_orm.repositories import (
     DjangoOrganizationRepository,
     DjangoMembershipRepository,
 )
-from pkg_auth.authorization.application.use_cases.sync_user_from_jwt import (
-    SyncUserFromJwtUseCase,
+from pkg_auth.authorization.application.use_cases.resolve_user_from_jwt import (
+    ResolveUserFromJwtUseCase,
 )
 from pkg_auth.authorization.application.use_cases.resolve_auth_context import (
     ResolveAuthContextUseCase,
@@ -71,7 +71,7 @@ install_pkg_auth(
     keycloak_base_url="https://auth.example.com",
     realm="itqadem",
     audience="my-django-service",
-    sync_user_use_case=SyncUserFromJwtUseCase(
+    resolve_user_use_case=ResolveUserFromJwtUseCase(    # Mode B — reader
         user_repo=DjangoUserRepository(),
     ),
     resolve_use_case=ResolveAuthContextUseCase(
@@ -80,6 +80,15 @@ install_pkg_auth(
     organization_repo=DjangoOrganizationRepository(),
 )
 ```
+
+A Mode B request whose Keycloak `sub` isn't mirrored into the shared
+ACL yet produces **HTTP 403** — that's the signal the source-of-truth
+service hasn't provisioned the user. Consumers never write in response.
+
+Mode A (source-of-truth) services pass `sync_user_use_case=SyncUserFromJwtUseCase(...)`
+instead — see [Setup (Mode A — source-of-truth, extending the schema)](#setup-mode-a--source-of-truth-extending-the-schema).
+The two parameters are mutually exclusive; passing both (or neither)
+raises `ValueError` at install time.
 
 For platform-admin detection see [Platform admin pattern](#platform-admin-pattern)
 below — pkg_auth ships a stateless helper rather than baking it into
@@ -338,6 +347,28 @@ In Mode A, your service runs `makemigrations` / `migrate` for the
 ACL tables. The package's bundled Alembic migrations are a starting
 point only — once you take ownership your Django migrations are the
 authoritative source.
+
+### 4. Wire `SyncUserFromJwtUseCase` (Mode A writer)
+
+Mode A services are the only ones allowed to upsert on JWT sight.
+Pass `sync_user_use_case` to `install_pkg_auth`:
+
+```python
+from pkg_auth.authorization.application.use_cases.sync_user_from_jwt import (
+    SyncUserFromJwtUseCase,
+)
+
+install_pkg_auth(
+    ...,
+    sync_user_use_case=SyncUserFromJwtUseCase(          # Mode A — writer
+        user_repo=DjangoUserRepository(model=MyUser),
+    ),
+    ...,
+)
+```
+
+`sync_user_use_case` and `resolve_user_use_case` are mutually
+exclusive.
 
 ## Strawberry GraphQL services
 

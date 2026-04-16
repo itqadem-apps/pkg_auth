@@ -3,6 +3,53 @@
 All notable changes to `pkg-auth` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] — 2026-04-16
+
+### Breaking — Mode B consumers get a reader-only JWT use case
+
+`SyncUserFromJwtUseCase` used to upsert the local `users` row on every
+authenticated request, regardless of whether the service owned the
+schema. For Mode B (consuming) services whose `ACL_DATABASE_URL`
+points at a Mode A peer's database (e.g. `fri_fast_meetings` pointing
+at `itq_users`), the bundled adapter's
+`INSERT INTO users (keycloak_sub, email, full_name) ...` hit a
+`NotNullViolationError` on `id` — and even with a defaulted `id`
+would have written nulls into Mode A-owned extension columns,
+corrupting the source-of-truth's invariants.
+
+v2.0 splits the use case at the application layer:
+
+- **`SyncUserFromJwtUseCase`** — unchanged, for Mode A (source-of-
+  truth) services that own the `users` schema.
+- **`ResolveUserFromJwtUseCase`** — new reader-only use case. Calls
+  `UserRepository.get_by_keycloak_sub` and raises
+  `UserNotProvisioned` (new `AuthorizationError` subclass) when the
+  row is missing. Mode B services should use this.
+
+The three integration factories now require exactly one of the two:
+
+- `pkg_auth.integrations.fastapi.make_get_auth_context(...)`
+- `pkg_auth.integrations.django.install_pkg_auth(...)`
+- `pkg_auth.integrations.strawberry.make_context_getter(...)`
+
+Each accepts `sync_user_use_case: ... | None = None` **xor**
+`resolve_user_use_case: ... | None = None`. Passing both (or neither)
+raises `ValueError` at factory-call time. No deprecation period — the
+old positional-only `sync_user_use_case` signature is gone.
+
+FastAPI and Django map `UserNotProvisioned` to **HTTP 403** (the
+source-of-truth hasn't mirrored this user yet). Strawberry's
+permissive context getter degrades `ctx.auth_context` to `None`.
+
+### Breaking — example app (`itqadem_courses_app`) switched to Mode B
+
+`examples/itqadem_courses_app/courses_app/deps.py` now wires
+`ResolveUserFromJwtUseCase` — `itq_courses` is a Mode B consumer of
+the `itq_users`-owned ACL. Mode A wiring is documented in
+`docs/FastAPI.md` and `docs/Django.md`.
+
+See `docs/MIGRATION_v2.md` for the full upgrade guide.
+
 ## [1.7.0] — 2026-04-15
 
 ### Breaking — Mode A and Mode B labels swapped

@@ -6,6 +6,7 @@ from pkg_auth.authorization import (
     UnknownOrganization,
     UnknownRole,
     UnknownUser,
+    UserNotProvisioned,
 )
 
 
@@ -15,6 +16,7 @@ def test_all_inherit_from_authorization_error():
     assert issubclass(UnknownOrganization, AuthorizationError)
     assert issubclass(UnknownUser, AuthorizationError)
     assert issubclass(UnknownRole, AuthorizationError)
+    assert issubclass(UserNotProvisioned, AuthorizationError)
 
 
 def test_authorization_error_is_a_plain_exception():

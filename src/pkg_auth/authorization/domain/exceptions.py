@@ -28,6 +28,16 @@ class UnknownUser(AuthorizationError):
     """The referenced user does not exist."""
 
 
+class UserNotProvisioned(AuthorizationError):
+    """JWT-authenticated user has no row in the local ACL ``users`` table.
+
+    Raised by :class:`ResolveUserFromJwtUseCase` in Mode B (consuming)
+    services: the caller is a valid Keycloak principal, but the
+    source-of-truth service (Mode A) hasn't mirrored them into the
+    shared ACL yet. Integration layers map this to HTTP 403.
+    """
+
+
 class UnknownRole(AuthorizationError):
     """The referenced role does not exist."""
 

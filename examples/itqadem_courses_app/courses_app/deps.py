@@ -22,8 +22,8 @@ from pkg_auth.authorization.application.use_cases.register_permission_catalog im
 from pkg_auth.authorization.application.use_cases.resolve_auth_context import (
     ResolveAuthContextUseCase,
 )
-from pkg_auth.authorization.application.use_cases.sync_user_from_jwt import (
-    SyncUserFromJwtUseCase,
+from pkg_auth.authorization.application.use_cases.resolve_user_from_jwt import (
+    ResolveUserFromJwtUseCase,
 )
 from pkg_auth.integrations.fastapi import (
     Authentication,
@@ -74,15 +74,21 @@ membership_repo = CachedMembershipRepository(
     ttl_seconds=30,
 )
 
-# Use cases
-sync_user_use_case = SyncUserFromJwtUseCase(user_repo=user_repo)
+# Use cases.
+#
+# itq_courses is a Mode B (consuming) service — the ACL tables are
+# owned by itq_users (the source-of-truth). We read user rows through
+# ResolveUserFromJwtUseCase; a missing user means itq_users hasn't
+# provisioned them yet, which pkg_auth maps to HTTP 403. Mode A services
+# use SyncUserFromJwtUseCase instead (see docs/FastAPI.md).
+resolve_user_use_case = ResolveUserFromJwtUseCase(user_repo=user_repo)
 resolve_use_case = ResolveAuthContextUseCase(membership_repo=membership_repo)
 register_catalog_use_case = RegisterPermissionCatalogUseCase(catalog_repo=catalog_repo)
 
 # Composed FastAPI dependency: returns (IdentityContext, AuthContext)
 get_auth_context = make_get_auth_context(
     get_identity=get_identity,
-    sync_user_use_case=sync_user_use_case,
+    resolve_user_use_case=resolve_user_use_case,
     resolve_use_case=resolve_use_case,
     organization_repo=organization_repo,
 )

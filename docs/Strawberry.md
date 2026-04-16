@@ -1,15 +1,20 @@
 # Strawberry GraphQL Integration
 
-## Setup
+## Setup (Mode B — consumer, the common case)
 
 ```python
+from pkg_auth.authorization.application.use_cases.resolve_user_from_jwt import (
+    ResolveUserFromJwtUseCase,
+)
 from pkg_auth.integrations.strawberry import (
     make_context_getter, IsAuthenticated, RequirePermission,
 )
 
 context_getter = make_context_getter(
     authenticate_use_case=authenticate_uc,
-    sync_user_use_case=sync_user_uc,
+    resolve_user_use_case=ResolveUserFromJwtUseCase(   # Mode B — reader
+        user_repo=user_repo,
+    ),
     resolve_use_case=resolve_uc,
     organization_repo=org_repo,
 )
@@ -17,6 +22,12 @@ context_getter = make_context_getter(
 schema = strawberry.Schema(query=Query)
 graphql_app = GraphQLRouter(schema, context_getter=context_getter)
 ```
+
+Mode A (source-of-truth) services pass `sync_user_use_case=SyncUserFromJwtUseCase(...)`
+instead. The two parameters are mutually exclusive; the Strawberry
+context getter is permissive, so a `UserNotProvisioned` miss in Mode B
+degrades `ctx.auth_context` to `None` rather than raising —
+permission classes (e.g. `RequirePermission`) then reject the query.
 
 ## Permission classes
 
@@ -46,5 +57,5 @@ class StrawberryContext:
 ```
 
 - `identity` is `None` when no valid JWT is present.
-- `auth_context` is `None` when `X-Organization-Id` header is missing or the user isn't a member.
+- `auth_context` is `None` when `X-Organization-Id` header is missing, the user isn't a member, or (Mode B) the user hasn't been provisioned into the ACL by the source-of-truth yet.
 - The context getter is permissive (no exceptions raised) — permission classes decide what to reject.
