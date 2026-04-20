@@ -79,6 +79,7 @@ Homepage = "https://github.com/itqadem-apps/pkg_auth"
 
 [project.scripts]
 keycloak-init-client = "pkg_auth.admin.cli:main"
+pkg-auth-sync-catalog = "pkg_auth.authorization.cli.sync_catalog:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
