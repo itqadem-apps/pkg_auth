@@ -4,7 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence, Union
 
-from ...domain.ports import PermissionCatalogRepository
+from ...domain.ports import (
+    PermissionCatalogPublisher,
+    PermissionCatalogRepository,
+)
 from ...domain.value_objects import PermissionKey
 
 
@@ -52,16 +55,19 @@ class RegisterPermissionCatalogUseCase:
     """Idempotently register the permission keys a service knows about.
 
     Each consuming service calls this on boot with its static perm
-    list. The repository upserts by ``key`` so calling it on every
-    restart is safe and converges. Re-registering the same key with a
+    list. The sink upserts by ``key`` so calling it on every restart
+    is safe and converges. Re-registering the same key with a
     different ``is_platform`` value flips the flag.
 
-    The central ACL UI reads from the resulting ``acl.permissions`` table
-    when building role-editor UIs. ``is_platform`` lets that UI filter
-    out platform-only permissions when editing org-scoped roles.
+    ``catalog_sink`` accepts either a :class:`PermissionCatalogRepository`
+    (direct SQLAlchemy write — used by the Mode A source-of-truth) or a
+    :class:`PermissionCatalogPublisher` (NATS publish — used by Mode B
+    consumers whose DB credential cannot write to the SoT's ACL tables).
+    Both ports expose the same ``register_many`` shape, so the use case
+    is agnostic to which one is wired in.
     """
 
-    catalog_repo: PermissionCatalogRepository
+    catalog_sink: PermissionCatalogRepository | PermissionCatalogPublisher
 
     async def execute(
         self,
@@ -70,7 +76,7 @@ class RegisterPermissionCatalogUseCase:
         entries: Sequence[CatalogEntryInput],
     ) -> None:
         normalized = [_normalize_entry(e) for e in entries]
-        await self.catalog_repo.register_many(
+        await self.catalog_sink.register_many(
             service_name=service_name,
             entries=normalized,
         )

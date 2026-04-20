@@ -353,6 +353,7 @@ class FakeMembershipRepository:
 class FakePermissionCatalogRepository:
     _by_id: dict[UUID, Permission] = field(default_factory=dict)
     _by_key: dict[str, UUID] = field(default_factory=dict)
+    _deleted: set[UUID] = field(default_factory=set)
 
     async def register_many(
         self,
@@ -371,6 +372,7 @@ class FakePermissionCatalogRepository:
                     description=entry.description,
                     is_platform=entry.is_platform,
                 )
+                self._deleted.discard(existing_id)
             else:
                 perm = Permission(
                     id=PermissionId(uuid4()),
@@ -381,6 +383,18 @@ class FakePermissionCatalogRepository:
                 )
                 self._by_id[perm.id.value] = perm
                 self._by_key[str(entry.key)] = perm.id.value
+
+    async def apply_snapshot(
+        self,
+        *,
+        service_name: str,
+        entries: Sequence[CatalogEntry],
+    ) -> None:
+        await self.register_many(service_name=service_name, entries=entries)
+        present = {str(e.key) for e in entries}
+        for perm_id, perm in list(self._by_id.items()):
+            if perm.service_name == service_name and str(perm.key) not in present:
+                self._deleted.add(perm_id)
 
     def _filter_scope(
         self, perms: list[Permission], scope: PermissionScope
@@ -394,12 +408,14 @@ class FakePermissionCatalogRepository:
     async def list_all(
         self, *, scope: PermissionScope = "all"
     ) -> list[Permission]:
-        return self._filter_scope(list(self._by_id.values()), scope)
+        live = [p for pid, p in self._by_id.items() if pid not in self._deleted]
+        return self._filter_scope(live, scope)
 
     async def list_for_service(
         self, service_name: str, *, scope: PermissionScope = "all"
     ) -> list[Permission]:
-        return self._filter_scope(
-            [p for p in self._by_id.values() if p.service_name == service_name],
-            scope,
-        )
+        live = [
+            p for pid, p in self._by_id.items()
+            if pid not in self._deleted and p.service_name == service_name
+        ]
+        return self._filter_scope(live, scope)

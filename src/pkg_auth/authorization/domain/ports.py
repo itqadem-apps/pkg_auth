@@ -118,6 +118,24 @@ class MembershipRepository(Protocol):
     async def list_for_user(self, user_id: UserId) -> list[Membership]: ...
 
 
+class PermissionCatalogPublisher(Protocol):
+    """Publishes a service's permission catalog to an out-of-process sink.
+
+    Mode B (consumer) services bind this in place of
+    :class:`PermissionCatalogRepository` so they never write to the
+    source-of-truth's ACL tables directly. The signature deliberately
+    mirrors ``PermissionCatalogRepository.register_many`` so the
+    registration use case accepts either port unchanged.
+    """
+
+    async def register_many(
+        self,
+        *,
+        service_name: str,
+        entries: Sequence["CatalogEntry"],
+    ) -> None: ...
+
+
 class PermissionCatalogRepository(Protocol):
     """Read/write access to the ``permissions`` table (the global perm catalog).
 

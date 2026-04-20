@@ -3,6 +3,32 @@
 All notable changes to `pkg-auth` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] — 2026-04-20
+
+### Breaking — permission catalogs sync over NATS
+
+Mode B consumers can no longer UPSERT into the SoT's `permissions`
+table directly — Vault-minted DB credentials are now `SELECT`-only
+and scoped to each service's own database. Boot-time catalog
+registration is inverted: consumers **publish** their catalog to NATS
+JetStream, and itq_users **subscribes** and applies snapshots using
+its own DB credential.
+
+- New port: `PermissionCatalogPublisher` (mirrors the
+  `register_many()` shape of `PermissionCatalogRepository`).
+- New adapters: `NatsPermissionCatalogPublisher`,
+  `PermissionCatalogSubscriber` under
+  `pkg_auth.authorization.adapters.nats`.
+- `RegisterPermissionCatalogUseCase.catalog_repo` renamed to
+  `catalog_sink` (accepts either port).
+- New `deleted_at` column on `permissions`
+  (alembic revision `pkg_auth_acl_0003`) — snapshot-based removal
+  soft-deletes absent keys to preserve `role_permissions` FKs.
+- `nats-py>=2.6` is a new hard dependency.
+
+See [`docs/MIGRATION_v3.md`](docs/MIGRATION_v3.md) and
+[`docs/NATS-Catalog-Sync.md`](docs/NATS-Catalog-Sync.md).
+
 ## [2.0.0] — 2026-04-16
 
 ### Breaking — Mode B consumers get a reader-only JWT use case

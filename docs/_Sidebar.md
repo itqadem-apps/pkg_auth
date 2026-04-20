@@ -5,3 +5,4 @@
 - [Django Integration](Django-Integration)
 - [Strawberry GraphQL Integration](Strawberry-GraphQL-Integration)
 - [Keycloak Admin](Keycloak-Admin)
+- [NATS Catalog Sync](NATS-Catalog-Sync)

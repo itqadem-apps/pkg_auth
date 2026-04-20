@@ -9,6 +9,7 @@ from pkg_auth.authorization.adapters.cache import (
     CachedMembershipRepository,
     InMemoryTTLCache,
 )
+from pkg_auth.authorization.adapters.nats import NatsPermissionCatalogPublisher
 from pkg_auth.authorization.adapters.sqlalchemy import (
     SqlAlchemyMembershipRepository,
     SqlAlchemyOrganizationRepository,
@@ -67,7 +68,15 @@ _cache = InMemoryTTLCache(max_entries=10_000)
 user_repo = SqlAlchemyUserRepository(session_factory=_session_factory)
 organization_repo = SqlAlchemyOrganizationRepository(session_factory=_session_factory)
 role_repo = SqlAlchemyRoleRepository(session_factory=_session_factory)
+# Read-side repo: the role builder needs to list available perms, which
+# only requires SELECT on the ACL tables.
 catalog_repo = SqlAlchemyPermissionCatalogRepository(session_factory=_session_factory)
+# Write-side sink: Mode B cannot write to the SoT's DB, so catalog
+# registration on boot goes out over NATS. itq_users subscribes and
+# applies the snapshot against its own (privileged) DB connection.
+catalog_publisher = NatsPermissionCatalogPublisher(
+    nats_url=os.environ.get("NATS_URL", "nats://localhost:4222"),
+)
 membership_repo = CachedMembershipRepository(
     inner=SqlAlchemyMembershipRepository(session_factory=_session_factory),
     cache=_cache,
@@ -83,7 +92,9 @@ membership_repo = CachedMembershipRepository(
 # use SyncUserFromJwtUseCase instead (see docs/FastAPI.md).
 resolve_user_use_case = ResolveUserFromJwtUseCase(user_repo=user_repo)
 resolve_use_case = ResolveAuthContextUseCase(membership_repo=membership_repo)
-register_catalog_use_case = RegisterPermissionCatalogUseCase(catalog_repo=catalog_repo)
+register_catalog_use_case = RegisterPermissionCatalogUseCase(
+    catalog_sink=catalog_publisher
+)
 
 # Composed FastAPI dependency: returns (IdentityContext, AuthContext)
 get_auth_context = make_get_auth_context(
@@ -109,5 +120,6 @@ __all__ = [
     "organization_repo",
     "role_repo",
     "catalog_repo",
+    "catalog_publisher",
     "membership_repo",
 ]

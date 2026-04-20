@@ -20,6 +20,9 @@ from pkg_auth.authorization.application.use_cases.create_organization import (
 from pkg_auth.authorization.application.use_cases.create_role import (
     CreateRoleUseCase,
 )
+from pkg_auth.authorization.application.use_cases.register_permission_catalog import (
+    RegisterPermissionCatalogUseCase,
+)
 from pkg_auth.authorization.application.use_cases.upsert_membership import (
     UpsertMembershipUseCase,
 )
@@ -28,7 +31,6 @@ from .deps import (
     catalog_repo,
     membership_repo,
     organization_repo,
-    register_catalog_use_case,
     role_repo,
     user_repo,
 )
@@ -36,7 +38,12 @@ from .permissions import CATALOG, SERVICE_NAME
 
 
 async def main() -> None:
-    # 1. Register this service's catalog (so role creation can validate keys)
+    # 1. Register this service's catalog so role creation can validate
+    #    keys. The production boot publishes over NATS, but seeding is a
+    #    local-dev shortcut: write straight to the repo.
+    register_catalog_use_case = RegisterPermissionCatalogUseCase(
+        catalog_sink=catalog_repo,
+    )
     await register_catalog_use_case.execute(
         service_name=SERVICE_NAME,
         entries=[(k, d) for k, d in CATALOG],

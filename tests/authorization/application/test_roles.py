@@ -34,7 +34,7 @@ from .fakes import (
 
 
 async def _seed_catalog(repo: FakePermissionCatalogRepository) -> None:
-    register = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    register = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await register.execute(
         service_name="courses",
         entries=[

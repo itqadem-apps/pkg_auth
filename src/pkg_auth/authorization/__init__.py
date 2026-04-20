@@ -38,6 +38,7 @@ from .domain.exceptions import (
 from .domain.ports import (
     MembershipRepository,
     OrganizationRepository,
+    PermissionCatalogPublisher,
     PermissionCatalogRepository,
     PermissionScope,
     RoleRepository,
@@ -73,6 +74,7 @@ __all__ = [
     "RoleRepository",
     "MembershipRepository",
     "PermissionCatalogRepository",
+    "PermissionCatalogPublisher",
     # Application DTOs
     "CatalogEntry",
     "PermissionScope",

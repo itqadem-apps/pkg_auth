@@ -1,4 +1,6 @@
 """RegisterPermissionCatalogUseCase tests (v1.4 — CatalogEntry + scope)."""
+from typing import Sequence
+
 import pytest
 
 from pkg_auth.authorization import CatalogEntry, PermissionKey
@@ -9,6 +11,37 @@ from pkg_auth.authorization.application.use_cases.register_permission_catalog im
 from .fakes import FakePermissionCatalogRepository
 
 
+class _FakePublisher:
+    """Publisher duck-type — same ``register_many`` shape as the repo."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, tuple[CatalogEntry, ...]]] = []
+
+    async def register_many(
+        self,
+        *,
+        service_name: str,
+        entries: Sequence[CatalogEntry],
+    ) -> None:
+        self.calls.append((service_name, tuple(entries)))
+
+
+async def test_use_case_accepts_publisher_in_place_of_repo():
+    """Mode B wires a PermissionCatalogPublisher into the same use case."""
+    publisher = _FakePublisher()
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=publisher)
+
+    await uc.execute(
+        service_name="courses",
+        entries=[CatalogEntry(PermissionKey("course:view"), "View")],
+    )
+
+    assert len(publisher.calls) == 1
+    service, entries = publisher.calls[0]
+    assert service == "courses"
+    assert [str(e.key) for e in entries] == ["course:view"]
+
+
 # --------------------------------------------------------------------------- #
 # Backwards-compatible registration shapes
 # --------------------------------------------------------------------------- #
@@ -16,7 +49,7 @@ from .fakes import FakePermissionCatalogRepository
 
 async def test_register_persists_entries_via_catalog_entry():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await uc.execute(
         service_name="courses",
         entries=[
@@ -30,7 +63,7 @@ async def test_register_persists_entries_via_catalog_entry():
 
 async def test_register_accepts_legacy_two_tuple_with_default_is_platform_false():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await uc.execute(
         service_name="courses",
         entries=[(PermissionKey("course:edit"), "Edit course content")],
@@ -42,7 +75,7 @@ async def test_register_accepts_legacy_two_tuple_with_default_is_platform_false(
 
 async def test_register_accepts_legacy_three_tuple_with_explicit_is_platform():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await uc.execute(
         service_name="courses",
         entries=[(PermissionKey("organizations:create"), "Create org", True)],
@@ -54,14 +87,14 @@ async def test_register_accepts_legacy_three_tuple_with_explicit_is_platform():
 
 async def test_register_rejects_unsupported_entry_shape():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     with pytest.raises(TypeError):
         await uc.execute(service_name="courses", entries=["not-a-tuple"])  # type: ignore[list-item]
 
 
 async def test_register_rejects_wrong_arity_tuple():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     with pytest.raises(ValueError):
         await uc.execute(
             service_name="courses",
@@ -76,7 +109,7 @@ async def test_register_rejects_wrong_arity_tuple():
 
 async def test_register_is_idempotent():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     entries = [CatalogEntry(PermissionKey("course:edit"), "Edit course")]
     await uc.execute(service_name="courses", entries=entries)
     await uc.execute(service_name="courses", entries=entries)
@@ -87,7 +120,7 @@ async def test_register_is_idempotent():
 
 async def test_register_updates_description_on_repeat():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await uc.execute(
         service_name="courses",
         entries=[CatalogEntry(PermissionKey("course:edit"), "Old description")],
@@ -103,7 +136,7 @@ async def test_register_updates_description_on_repeat():
 
 async def test_register_flips_is_platform_on_repeat():
     repo = FakePermissionCatalogRepository()
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await uc.execute(
         service_name="users",
         entries=[CatalogEntry(PermissionKey("organizations:create"), None)],
@@ -127,7 +160,7 @@ async def test_register_flips_is_platform_on_repeat():
 
 
 async def _seed_mixed_catalog(repo: FakePermissionCatalogRepository) -> None:
-    uc = RegisterPermissionCatalogUseCase(catalog_repo=repo)
+    uc = RegisterPermissionCatalogUseCase(catalog_sink=repo)
     await uc.execute(
         service_name="users",
         entries=[

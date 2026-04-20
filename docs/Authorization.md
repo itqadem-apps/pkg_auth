@@ -4,7 +4,9 @@
 
 ## Database topology
 
-All itqadem services connect to a **single shared central ACL database**, owned and migrated by the users service. Authorization checks hit this database on every protected request (with an optional in-process or Redis cache in front). There are no events, no broker, and no per-service cache replicas.
+The ACL tables live **inside the `itq_users` service's database** (Mode A — source of truth), which owns and migrates the schema. Consumer services (Mode B) read from the same tables via their own `SELECT`-only credential. Authorization checks hit this database on every protected request (with an optional in-process or Redis cache in front).
+
+**Catalog writes go over NATS, not SQL.** Mode B services cannot write to the SoT's database, so `RegisterPermissionCatalogUseCase` is wired with a `NatsPermissionCatalogPublisher` on Mode B. itq_users runs a `PermissionCatalogSubscriber` that receives each snapshot and upserts into its own database. See [`NATS-Catalog-Sync.md`](NATS-Catalog-Sync.md) for the wire format and deployment setup.
 
 ## Schema (`acl.*`)
 

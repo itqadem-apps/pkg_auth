@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pkg-auth"
-version = "2.0.0"
+version = "3.0.0"
 description = "Clean-architecture auth core for multiple Python frameworks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dependencies = [
     "httpx>=0.28.1",
     "pyjwt[crypto]>=2.10.1",
     "requests>=2.32.3",
+    "nats-py>=2.6",
 ]
 
 [project.optional-dependencies]

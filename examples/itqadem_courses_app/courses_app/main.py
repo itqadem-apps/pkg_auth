@@ -9,6 +9,7 @@ from pkg_auth.authentication import IdentityContext
 from pkg_auth.authorization import AuthContext
 
 from .deps import (
+    catalog_publisher,
     configure_app,
     get_auth_context,
     register_catalog_use_case,
@@ -19,13 +20,17 @@ from .permissions import CATALOG, SERVICE_NAME
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Register this service's perm catalog on boot. Idempotent — safe
-    # to call on every restart.
+    # Publish this service's perm catalog on boot. Goes out over NATS;
+    # itq_users subscribes and upserts into the SoT's ACL DB. Idempotent
+    # (snapshot semantics) — safe to call on every restart.
     await register_catalog_use_case.execute(
         service_name=SERVICE_NAME,
         entries=[(key, desc) for key, desc in CATALOG],
     )
-    yield
+    try:
+        yield
+    finally:
+        await catalog_publisher.close()
 
 
 app = FastAPI(
