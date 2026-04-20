@@ -7,7 +7,7 @@ only from this module; it must not import any concrete adapter.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Protocol, Sequence
+from typing import TYPE_CHECKING, Iterable, Literal, Protocol, Sequence
 
 from .entities import (
     AuthContext,
@@ -141,3 +141,17 @@ class PermissionCatalogRepository(Protocol):
     async def list_for_service(
         self, service_name: str, *, scope: PermissionScope = "all"
     ) -> list[Permission]: ...
+    async def prune_absent(
+        self,
+        *,
+        service_name: str,
+        keep_keys: Iterable[PermissionKey],
+    ) -> int:
+        """Delete permissions owned by ``service_name`` whose key is NOT in
+        ``keep_keys``. Returns the number of rows deleted.
+
+        If ``keep_keys`` is empty, every row for ``service_name`` is deleted.
+        The FK ``role_permissions.permission_id`` is ``ON DELETE CASCADE``, so
+        role assignments referencing the pruned rows are silently dropped.
+        """
+        ...

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Iterable, Sequence
 
 from ....application.use_cases.register_permission_catalog import CatalogEntry
 from ....domain.entities import Permission as DomainPermission
@@ -66,3 +66,16 @@ class DjangoPermissionCatalogRepository:
             scope,
         )
         return [_to_domain(r) async for r in qs]
+
+    async def prune_absent(
+        self,
+        *,
+        service_name: str,
+        keep_keys: Iterable[PermissionKey],
+    ) -> int:
+        keys = [str(k) for k in keep_keys]
+        qs = self.model.objects.filter(service_name=service_name)
+        if keys:
+            qs = qs.exclude(key__in=keys)
+        deleted, _ = await qs.adelete()
+        return int(deleted)

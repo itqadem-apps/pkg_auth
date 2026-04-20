@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Sequence
+from typing import Any, Iterable, Sequence
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -93,3 +93,18 @@ class SqlAlchemyPermissionCatalogRepository:
                 stmt = stmt.where(clause)
             rows = (await session.execute(stmt)).scalars().all()
             return [_to_permission(r) for r in rows]
+
+    async def prune_absent(
+        self,
+        *,
+        service_name: str,
+        keep_keys: Iterable[PermissionKey],
+    ) -> int:
+        keys = [str(k) for k in keep_keys]
+        stmt = delete(self.model).where(self.model.service_name == service_name)
+        if keys:
+            stmt = stmt.where(self.model.key.notin_(keys))
+        async with self.session_factory() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+            return int(result.rowcount or 0)

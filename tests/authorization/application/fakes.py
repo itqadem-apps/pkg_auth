@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import Iterable, Sequence
 from uuid import UUID, uuid4
 
 from pkg_auth.authorization import (
@@ -403,3 +403,19 @@ class FakePermissionCatalogRepository:
             [p for p in self._by_id.values() if p.service_name == service_name],
             scope,
         )
+
+    async def prune_absent(
+        self,
+        *,
+        service_name: str,
+        keep_keys: Iterable[PermissionKey],
+    ) -> int:
+        keys = {str(k) for k in keep_keys}
+        victims = [
+            p for p in self._by_id.values()
+            if p.service_name == service_name and str(p.key) not in keys
+        ]
+        for p in victims:
+            self._by_id.pop(p.id.value, None)
+            self._by_key.pop(str(p.key), None)
+        return len(victims)
