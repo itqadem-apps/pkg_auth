@@ -28,16 +28,12 @@ import os
 import sys
 from typing import Awaitable, Callable, Sequence
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-from ..adapters.sqlalchemy.repositories.permission_catalog import (
-    SqlAlchemyPermissionCatalogRepository,
-)
 from ..application.use_cases.register_permission_catalog import CatalogEntry
 from ..application.use_cases.sync_permission_catalog import (
     SyncPermissionCatalogUseCase,
     SyncResult,
 )
+from ..domain.ports import PermissionCatalogRepository
 
 CatalogLoader = Callable[[str], Sequence[CatalogEntry]]
 
@@ -102,22 +98,34 @@ def load_catalog(dotted: str) -> list[CatalogEntry]:
 async def run(
     args: argparse.Namespace,
     *,
-    session_factory: async_sessionmaker | None = None,
+    repo: PermissionCatalogRepository | None = None,
+    session_factory: object | None = None,
     catalog_loader: CatalogLoader = load_catalog,
 ) -> SyncResult:
-    if session_factory is None:
-        if not args.db_url:
-            raise SystemExit(
-                "--db-url is required (or set ACL_DATABASE_URL)"
-            )
-        engine = create_async_engine(args.db_url, future=True)
-        session_factory = async_sessionmaker(engine, expire_on_commit=False)
-        dispose: Callable[[], Awaitable[None]] | None = engine.dispose
-    else:
-        dispose = None
+    dispose: Callable[[], Awaitable[None]] | None = None
+    if repo is None:
+        from sqlalchemy.ext.asyncio import (  # noqa: PLC0415
+            async_sessionmaker,
+            create_async_engine,
+        )
+
+        from ..adapters.sqlalchemy.repositories.permission_catalog import (  # noqa: PLC0415
+            SqlAlchemyPermissionCatalogRepository,
+        )
+
+        if session_factory is None:
+            if not args.db_url:
+                raise SystemExit(
+                    "--db-url is required (or set ACL_DATABASE_URL)"
+                )
+            engine = create_async_engine(args.db_url, future=True)
+            session_factory = async_sessionmaker(engine, expire_on_commit=False)
+            dispose = engine.dispose
+        repo = SqlAlchemyPermissionCatalogRepository(
+            session_factory=session_factory
+        )
 
     entries = catalog_loader(args.catalog)
-    repo = SqlAlchemyPermissionCatalogRepository(session_factory=session_factory)
     use_case = SyncPermissionCatalogUseCase(catalog_repo=repo)
 
     if args.dry_run:
