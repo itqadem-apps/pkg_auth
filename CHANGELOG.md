@@ -3,6 +3,33 @@
 All notable changes to `pkg-auth` are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] — 2026-04-20
+
+### Added
+
+- `PermissionCatalogRepository.prune_absent(service_name, keep_keys)` port
+  method with SQLAlchemy, Django, and fake implementations. Scoped DELETE
+  for a single service; empty `keep_keys` deletes every row for the service.
+- `SyncPermissionCatalogUseCase` — upsert declared entries then prune
+  anything for the service that is no longer declared. Supports
+  `dry_run=True` for a diff-only report. Returns `SyncResult(upserted,
+  pruned, dry_run)`.
+- `pkg-auth-sync-catalog` console script for deploy-time init containers.
+  Factored (`build_arg_parser` / `load_catalog` / `run` / `main`) so
+  services can compose their own entrypoint with extra flags or a custom
+  catalog loader.
+
+### Notes
+
+- The `role_permissions.permission_id` FK is `ON DELETE CASCADE`: pruning
+  a permission silently drops role assignments that referenced it. Run
+  `--dry-run` first on shared environments. See
+  `docs/Authorization.md` → Syncing permission catalogs.
+- Recommended deployment: runtime services keep their existing SELECT-only
+  credential and `RegisterPermissionCatalogUseCase`. A separate Vault DB
+  role with `INSERT, UPDATE, DELETE` on `permissions` only is minted for
+  the init container running the new CLI.
+
 ## [2.0.0] — 2026-04-16
 
 ### Breaking — Mode B consumers get a reader-only JWT use case

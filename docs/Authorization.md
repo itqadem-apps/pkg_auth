@@ -64,6 +64,54 @@ class AuthContext:
 
 Permission keys use the `resource:action` format (e.g. `"course:edit"`, `"billing:invoice:refund"`). Each service declares its own keys in code and registers them on boot via `RegisterPermissionCatalogUseCase`. The catalog serves the users service's admin UI for building roles.
 
+### Syncing permission catalogs (deploy-time)
+
+Runtime services should only have SELECT access to the ACL database and
+register their catalog via `RegisterPermissionCatalogUseCase` (idempotent
+UPSERT, no deletes). When a service *removes* a permission from its code
+catalog, the row becomes an orphan — nothing breaks, but it lingers.
+
+To prune removed permissions, run `pkg-auth-sync-catalog` from a deploy-time
+init container holding a *separate* credential with INSERT/UPDATE/DELETE on
+the `permissions` table only.
+
+**Two Vault database roles per consumer service:**
+
+- **Runtime role** — `SELECT` on all ACL tables. Used by the long-running
+  process. No writes, ever.
+- **Sync role** — `SELECT` on ACL tables + `INSERT, UPDATE, DELETE` on
+  `permissions` only. Used exclusively by the init container. Can have a
+  short lease TTL (minutes).
+
+**CLI usage:**
+
+```bash
+pkg-auth-sync-catalog \
+    --service courses \
+    --catalog courses.domain.permissions:CATALOG \
+    --db-url "$ACL_DATABASE_URL"
+```
+
+`--dry-run` prints the diff (`to add`, `to prune`) without writing — useful
+the first time you run sync against an existing database.
+
+The CLI is factored so services can compose their own entrypoint if they
+need extra flags or a custom catalog loader:
+
+```python
+from pkg_auth.authorization.cli.sync_catalog import (
+    build_arg_parser, load_catalog, run,
+)
+```
+
+> **Warning — FK CASCADE.** The `role_permissions.permission_id` FK is
+> `ON DELETE CASCADE`. When sync deletes a permission row, any
+> `role_permissions` row referencing it is silently dropped, meaning roles
+> that granted the pruned permission lose it with no error and no log at
+> the DB level. Removing a permission from a service's catalog is an
+> intentional breaking change to every role that granted it. Always run
+> `--dry-run` first on shared environments.
+
 ### Extending the schema
 
 The users service can extend `users`, `organizations`, and `memberships` with extra fields. Two patterns are supported:
