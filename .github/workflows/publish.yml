@@ -60,8 +60,10 @@ jobs:
       - name: Create GitHub Release and upload artifacts
         uses: softprops/action-gh-release@v2
         with:
+          # No target_commitish: the tag already exists (created by prepare),
+          # so the release attaches to it. Passing a tag name here is rejected
+          # by the GitHub API (422 invalid target_commitish).
           tag_name: ${{ inputs.tag }}
-          target_commitish: ${{ inputs.ref || inputs.tag }}
           name: pkg_auth v${{ inputs.version }}
           fail_on_unmatched_files: false
           body: |
