@@ -1,24 +1,33 @@
 name: Release pkg_auth (manual)
 
+# Manual release: set an explicit version, commit + tag it, then hand off to
+# the shared publish workflow (build → GitHub Release + PyPI). Publishing logic
+# lives only in publish.yml.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to release (e.g. 0.1.1)
+        description: Version to release (e.g. 2.2.0)
         required: true
         type: string
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
-  release:
+  prepare:
+    name: Set version + tag
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ inputs.version }}
+      tag: pkg_auth-v${{ inputs.version }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Validate version format
         run: |
@@ -27,40 +36,32 @@ jobs:
             exit 1
           fi
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Build artifacts (sdist + wheel)
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
-          python -m build
-
-      - name: Capture artifact names
-        id: artifacts
+      - name: Set pyproject.toml version + commit + tag
+        env:
+          NEW_VER: ${{ inputs.version }}
         run: |
           set -e
-          WHEEL=$(ls -1 dist/*.whl | head -n1 || true)
-          SDIST=$(ls -1 dist/*.tar.gz | head -n1 || true)
-          echo "wheel_name=$(basename "$WHEEL")" >> "$GITHUB_OUTPUT"
-          echo "sdist_name=$(basename "$SDIST")" >> "$GITHUB_OUTPUT"
+          TAG="pkg_auth-v${NEW_VER}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists" >&2; exit 1
+          fi
+          sed -i.bak -e "0,/^version = \".*\"/s//version = \"$NEW_VER\"/" pyproject.toml
+          rm -f pyproject.toml.bak
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "chore(pkg_auth): release v${NEW_VER} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }} || true
+          git tag -a "$TAG" -m "pkg_auth $NEW_VER"
+          git push origin "$TAG"
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: pkg_auth-v${{ inputs.version }}
-          target_commitish: ${{ github.sha }}
-          name: pkg_auth v${{ inputs.version }}
-          fail_on_unmatched_files: false
-          body: |
-            Install from the tag (no PyPI):
-
-            pip install "git+https://github.com/${{ github.repository }}.git@pkg_auth-v${{ inputs.version }}"
-
-            Or install the wheel directly from this release (public repo):
-
-            pip install "https://github.com/${{ github.repository }}/releases/download/pkg_auth-v${{ inputs.version }}/${{ steps.artifacts.outputs.wheel_name }}"
-          files: |
-            dist/*
+  publish:
+    name: Publish
+    needs: prepare
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+      version: ${{ needs.prepare.outputs.version }}
+      ref: ${{ needs.prepare.outputs.tag }}
+      mode: manual
+    secrets: inherit

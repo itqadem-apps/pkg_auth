@@ -1,6 +1,7 @@
 src/pkg_auth.egg-info
 .idea
 build/
+dist/
 *.swp
 package-lock.json
 .pytest_cache

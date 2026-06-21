@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  # Allows the prepare (auto-release) workflow to gate on tests before tagging.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.10', '3.11', '3.12' ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package + dev/backends
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,acl-sqlalchemy,acl-django,fastapi,django,strawberry,cache-redis]"
+
+      - name: Run tests (unit; integration excluded by default)
+        run: pytest
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install package + dev/backends
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,acl-sqlalchemy,acl-django,fastapi,django,strawberry,cache-redis]"
+
+      - name: mypy (strict on domain + application — hard gate)
+        run: |
+          mypy \
+            src/pkg_auth/authentication \
+            src/pkg_auth/authorization/domain \
+            src/pkg_auth/authorization/application \
+            src/pkg_auth/authorization/config.py
+
+      - name: mypy (full package — informational)
+        continue-on-error: true
+        run: mypy src/pkg_auth

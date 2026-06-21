@@ -1,0 +1,89 @@
+name: Publish pkg_auth
+
+# Separate publish workflow: build the distribution, attach it to a GitHub
+# Release, and publish to PyPI via Trusted Publishing (OIDC — no stored token).
+#
+# Invoked two ways, both kept out of the test/prepare workflows:
+#   - workflow_call  → from auto-release (push to main) and the manual release
+#   - workflow_dispatch → run by a maintainer for an existing tag
+on:
+  workflow_call:
+    inputs:
+      tag:     { required: true,  type: string }
+      version: { required: true,  type: string }
+      ref:     { required: false, type: string }   # commit/tag to build from
+      mode:    { required: false, type: string, default: manual }
+  workflow_dispatch:
+    inputs:
+      tag:     { required: true,  type: string, description: 'Tag to build/release (e.g. pkg_auth-v2.2.0)' }
+      version: { required: true,  type: string, description: 'Version (e.g. 2.2.0)' }
+      ref:     { required: false, type: string, description: 'Commit/tag to build from (defaults to tag)' }
+
+permissions:
+  contents: write   # create the GitHub Release
+  id-token: write   # PyPI Trusted Publishing (OIDC)
+
+jobs:
+  publish:
+    name: Build + release + PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/fri-pkg-auth
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build artifacts (sdist + wheel)
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          python -m build
+
+      - name: Capture artifact names
+        id: artifacts
+        run: |
+          set -e
+          WHEEL=$(ls -1 dist/*.whl | head -n1 || true)
+          SDIST=$(ls -1 dist/*.tar.gz | head -n1 || true)
+          echo "wheel_name=$(basename "$WHEEL")" >> "$GITHUB_OUTPUT"
+          echo "sdist_name=$(basename "$SDIST")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release and upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          target_commitish: ${{ inputs.ref || inputs.tag }}
+          name: pkg_auth v${{ inputs.version }}
+          fail_on_unmatched_files: false
+          body: |
+            Release for fri-pkg-auth (mode: ${{ inputs.mode }}).
+
+            Install from PyPI:
+
+            pip install "fri-pkg-auth==${{ inputs.version }}"
+
+            Or install from the tag:
+
+            pip install "git+https://github.com/${{ github.repository }}.git@${{ inputs.tag }}"
+
+            Or install the wheel directly from this release:
+
+            pip install "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}/${{ steps.artifacts.outputs.wheel_name }}"
+          files: |
+            dist/*
+
+      - name: Publish to PyPI (Trusted Publishing / OIDC)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # No username/password: OIDC trusted publishing is used.
+          # Skip re-uploading a version that already exists (idempotent reruns).
+          skip-existing: true

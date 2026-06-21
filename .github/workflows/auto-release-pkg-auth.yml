@@ -4,25 +4,34 @@ on:
   push:
     branches: [ main ]
 
+# id-token/contents are needed because this workflow CALLS publish.yml
+# (reusable) at the end — a called workflow inherits the caller's permissions.
 permissions:
   contents: write
+  id-token: write
 
 jobs:
-  release:
-    name: Bump, tag, release
-    runs-on: ubuntu-latest
+  # ---- TEST ----------------------------------------------------------------
+  ci:
+    name: CI
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    uses: ./.github/workflows/ci.yml
+
+  # ---- PREPARE (bump version, commit, tag) ---------------------------------
+  prepare:
+    name: Bump + tag
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.new }}
+      tag: ${{ steps.version.outputs.tag }}
+      mode: ${{ steps.version.outputs.mode }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
 
       - name: Determine bump level from commit message
         id: level
@@ -132,10 +141,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add pyproject.toml
+          # [skip ci] keeps GitHub from re-triggering this workflow on the bump commit.
           git commit -m "chore(pkg_auth): release v${NEW_VER} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:${{ github.ref_name }} || true
 
-      - name: Create tag
+      - name: Create and push tag
         env:
           NEW_VER: ${{ steps.version.outputs.new }}
         run: |
@@ -147,35 +157,14 @@ jobs:
           fi
           git push origin "$TAG"
 
-      - name: Build pkg_auth artifacts (sdist + wheel)
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
-          python -m build
-
-      - name: Capture artifact names
-        id: artifacts
-        run: |
-          set -e
-          WHEEL=$(ls -1 dist/*.whl | head -n1 || true)
-          SDIST=$(ls -1 dist/*.tar.gz | head -n1 || true)
-          echo "wheel_name=$(basename "$WHEEL")" >> "$GITHUB_OUTPUT"
-          echo "sdist_name=$(basename "$SDIST")" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release and upload artifacts
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: pkg_auth v${{ steps.version.outputs.new }}
-          body: |
-            Auto release for pkg_auth (mode: ${{ steps.version.outputs.mode }}).
-
-            Install directly from the tag:
-
-            pip install "git+https://github.com/${{ github.repository }}.git@${{ steps.version.outputs.tag }}"
-
-            Or install the wheel directly from the release (public repo):
-
-            pip install "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.artifacts.outputs.wheel_name }}"
-          files: |
-            dist/*
+  # ---- PUBLISH (build → GitHub Release + PyPI) -----------------------------
+  publish:
+    name: Publish
+    needs: prepare
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+      version: ${{ needs.prepare.outputs.version }}
+      ref: ${{ needs.prepare.outputs.tag }}
+      mode: ${{ needs.prepare.outputs.mode }}
+    secrets: inherit
