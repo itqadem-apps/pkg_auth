@@ -1,4 +1,4 @@
-"""Django ORM implementation of PermissionCatalogRepository (v1.4 — is_platform + scope)."""
+"""Django ORM implementation of PermissionCatalogRepository (visibility + scope)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -8,7 +8,12 @@ from typing import Iterable, Sequence
 from ....application.use_cases.register_permission_catalog import CatalogEntry
 from ....domain.entities import Permission as DomainPermission
 from ....domain.ports import PermissionScope
-from ....domain.value_objects import PermissionId, PermissionKey
+from ....domain.value_objects import (
+    LocalizedText,
+    PermissionId,
+    PermissionKey,
+    PermissionVisibility,
+)
 from ..models import Permission as DefaultPermissionModel
 
 
@@ -17,16 +22,26 @@ def _to_domain(row) -> DomainPermission:
         id=PermissionId(row.id),
         key=PermissionKey(row.key),
         service_name=row.service_name,
-        description=row.description,
-        is_platform=bool(row.is_platform),
+        description=LocalizedText(row.description or {}),
+        visibility=PermissionVisibility(row.visibility),
     )
 
 
 def _scope_filter(qs, scope: PermissionScope):
-    if scope == "org":
-        return qs.filter(is_platform=False)
+    if scope in ("org", "tenant"):
+        return qs.filter(
+            visibility__in=(
+                PermissionVisibility.SHARED.value,
+                PermissionVisibility.TENANT_ONLY.value,
+            )
+        )
     if scope == "platform":
-        return qs.filter(is_platform=True)
+        return qs.filter(
+            visibility__in=(
+                PermissionVisibility.PLATFORM_ONLY.value,
+                PermissionVisibility.SHARED.value,
+            )
+        )
     return qs
 
 
@@ -46,8 +61,8 @@ class DjangoPermissionCatalogRepository:
                 key=str(entry.key),
                 defaults={
                     "service_name": service_name,
-                    "description": entry.description,
-                    "is_platform": entry.is_platform,
+                    "description": entry.description.as_dict() or None,
+                    "visibility": entry.visibility.value,
                     "registered_at": now,
                 },
             )
@@ -66,6 +81,12 @@ class DjangoPermissionCatalogRepository:
             scope,
         )
         return [_to_domain(r) async for r in qs]
+
+    async def get_service_map(self) -> dict[str, str]:
+        return {
+            row.key: row.service_name
+            async for row in self.model.objects.only("key", "service_name")
+        }
 
     async def prune_absent(
         self,

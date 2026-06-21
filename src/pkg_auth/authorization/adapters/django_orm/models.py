@@ -35,8 +35,10 @@ from django.db import models
 from .mixins import (
     MembershipMixin,
     OrganizationMixin,
+    OrganizationServiceMixin,
     PermissionMixin,
     RoleMixin,
+    ServiceMixin,
     UserMixin,
 )
 
@@ -66,6 +68,31 @@ class Permission(PermissionMixin):
         managed = False
         db_table = "permissions"
         app_label = "pkg_auth_acl"
+
+
+class Service(ServiceMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    class Meta:
+        managed = False
+        db_table = "services"
+        app_label = "pkg_auth_acl"
+
+
+class OrganizationService(OrganizationServiceMixin):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        db_column="organization_id",
+        related_name="services",
+    )
+
+    class Meta:
+        managed = False
+        db_table = "organization_services"
+        app_label = "pkg_auth_acl"
+        unique_together = (("organization", "service_name"),)
 
 
 class Role(RoleMixin):

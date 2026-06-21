@@ -33,7 +33,7 @@ from ..application.use_cases.sync_permission_catalog import (
     SyncPermissionCatalogUseCase,
     SyncResult,
 )
-from ..domain.ports import PermissionCatalogRepository
+from ..domain.ports import PermissionCatalogRepository, ServiceRepository
 
 CatalogLoader = Callable[[str], Sequence[CatalogEntry]]
 
@@ -99,6 +99,7 @@ async def run(
     args: argparse.Namespace,
     *,
     repo: PermissionCatalogRepository | None = None,
+    service_repo: ServiceRepository | None = None,
     session_factory: object | None = None,
     catalog_loader: CatalogLoader = load_catalog,
 ) -> SyncResult:
@@ -112,6 +113,9 @@ async def run(
         from ..adapters.sqlalchemy.repositories.permission_catalog import (  # noqa: PLC0415
             SqlAlchemyPermissionCatalogRepository,
         )
+        from ..adapters.sqlalchemy.repositories.service import (  # noqa: PLC0415
+            SqlAlchemyServiceRepository,
+        )
 
         if session_factory is None:
             if not args.db_url:
@@ -124,9 +128,15 @@ async def run(
         repo = SqlAlchemyPermissionCatalogRepository(
             session_factory=session_factory
         )
+        if service_repo is None:
+            service_repo = SqlAlchemyServiceRepository(
+                session_factory=session_factory
+            )
 
     entries = catalog_loader(args.catalog)
-    use_case = SyncPermissionCatalogUseCase(catalog_repo=repo)
+    use_case = SyncPermissionCatalogUseCase(
+        catalog_repo=repo, service_repo=service_repo
+    )
 
     if args.dry_run:
         existing = await repo.list_for_service(args.service, scope="all")

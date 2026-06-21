@@ -85,20 +85,34 @@ async def test_dry_run_reports_counts_without_writing() -> None:
     assert keys == ["courses:legacy", "courses:view"]
 
 
-async def test_sync_upserts_flips_is_platform_flag() -> None:
+async def test_sync_upserts_flips_visibility_flag() -> None:
+    from pkg_auth.authorization import PermissionVisibility
+
     repo = FakePermissionCatalogRepository()
     await repo.register_many(
         service_name="courses",
-        entries=[CatalogEntry(PermissionKey("courses:view"), "old", is_platform=False)],
+        entries=[
+            CatalogEntry(
+                PermissionKey("courses:view"),
+                "old",
+                PermissionVisibility.SHARED,
+            )
+        ],
     )
 
     uc = SyncPermissionCatalogUseCase(catalog_repo=repo)
     await uc.execute(
         service_name="courses",
-        entries=[CatalogEntry(PermissionKey("courses:view"), "new", is_platform=True)],
+        entries=[
+            CatalogEntry(
+                PermissionKey("courses:view"),
+                "new",
+                PermissionVisibility.PLATFORM_ONLY,
+            )
+        ],
     )
 
     perms = await repo.list_for_service("courses")
     assert len(perms) == 1
-    assert perms[0].is_platform is True
-    assert perms[0].description == "new"
+    assert perms[0].visibility is PermissionVisibility.PLATFORM_ONLY
+    assert perms[0].description.get("en") == "new"

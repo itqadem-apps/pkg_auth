@@ -14,16 +14,22 @@ from uuid import UUID, uuid4
 from pkg_auth.authorization import (
     AuthContext,
     CatalogEntry,
+    LocalizedText,
     Membership,
+    OrganizationService,
     OrgId,
     Organization,
     Permission,
     PermissionId,
     PermissionKey,
     PermissionScope,
+    PermissionVisibility,
     Role,
     RoleId,
     RoleName,
+    Service,
+    ServiceName,
+    ServiceSpec,
     User,
     UserId,
 )
@@ -369,7 +375,7 @@ class FakePermissionCatalogRepository:
                     key=entry.key,
                     service_name=service_name,
                     description=entry.description,
-                    is_platform=entry.is_platform,
+                    visibility=entry.visibility,
                 )
             else:
                 perm = Permission(
@@ -377,7 +383,7 @@ class FakePermissionCatalogRepository:
                     key=entry.key,
                     service_name=service_name,
                     description=entry.description,
-                    is_platform=entry.is_platform,
+                    visibility=entry.visibility,
                 )
                 self._by_id[perm.id.value] = perm
                 self._by_key[str(entry.key)] = perm.id.value
@@ -385,10 +391,16 @@ class FakePermissionCatalogRepository:
     def _filter_scope(
         self, perms: list[Permission], scope: PermissionScope
     ) -> list[Permission]:
-        if scope == "org":
-            return [p for p in perms if not p.is_platform]
+        if scope in ("org", "tenant"):
+            return [
+                p for p in perms
+                if p.visibility != PermissionVisibility.PLATFORM_ONLY
+            ]
         if scope == "platform":
-            return [p for p in perms if p.is_platform]
+            return [
+                p for p in perms
+                if p.visibility != PermissionVisibility.TENANT_ONLY
+            ]
         return perms
 
     async def list_all(
@@ -403,6 +415,11 @@ class FakePermissionCatalogRepository:
             [p for p in self._by_id.values() if p.service_name == service_name],
             scope,
         )
+
+    async def get_service_map(self) -> dict[str, str]:
+        return {
+            str(p.key): p.service_name for p in self._by_id.values()
+        }
 
     async def prune_absent(
         self,
@@ -419,3 +436,98 @@ class FakePermissionCatalogRepository:
             self._by_id.pop(p.id.value, None)
             self._by_key.pop(str(p.key), None)
         return len(victims)
+
+
+# --------------------------------------------------------------------------- #
+# ServiceRepository
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(slots=True)
+class FakeServiceRepository:
+    _by_name: dict[str, Service] = field(default_factory=dict)
+
+    async def upsert_many(self, services: Sequence[ServiceSpec]) -> None:
+        for s in services:
+            self._by_name[str(s.name)] = Service(
+                name=s.name,
+                display_label=s.display_label,
+                auto_provision=s.auto_provision,
+                saas_available=s.saas_available,
+                created_at=_utcnow(),
+            )
+
+    async def ensure_exists(self, *, service_name: str) -> None:
+        if service_name not in self._by_name:
+            self._by_name[service_name] = Service(
+                name=ServiceName(service_name),
+                display_label=LocalizedText({}),
+                auto_provision=False,
+                saas_available=False,
+                created_at=_utcnow(),
+            )
+
+    async def get(self, name: ServiceName) -> Service | None:
+        return self._by_name.get(str(name))
+
+    async def list_all(self) -> list[Service]:
+        return [self._by_name[n] for n in sorted(self._by_name)]
+
+    async def prune_absent(self, *, keep: Iterable[ServiceName]) -> int:
+        keep_names = {str(n) for n in keep}
+        victims = [n for n in self._by_name if n not in keep_names]
+        for n in victims:
+            self._by_name.pop(n, None)
+        return len(victims)
+
+
+# --------------------------------------------------------------------------- #
+# OrganizationServiceRepository
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(slots=True)
+class FakeOrganizationServiceRepository:
+    _by_key: dict[tuple[UUID, str], OrganizationService] = field(
+        default_factory=dict
+    )
+
+    async def list_enabled_service_names(self, org_id: OrgId) -> set[str]:
+        return {
+            svc
+            for (oid, svc), e in self._by_key.items()
+            if oid == org_id.value and e.enabled
+        }
+
+    async def get(
+        self, org_id: OrgId, service_name: ServiceName
+    ) -> OrganizationService | None:
+        return self._by_key.get((org_id.value, str(service_name)))
+
+    async def enable(
+        self, org_id: OrgId, service_name: ServiceName, *, source: str
+    ) -> OrganizationService:
+        ent = OrganizationService(
+            organization_id=org_id,
+            service_name=service_name,
+            enabled=True,
+            source=source,
+            granted_at=_utcnow(),
+        )
+        self._by_key[(org_id.value, str(service_name))] = ent
+        return ent
+
+    async def disable(
+        self, org_id: OrgId, service_name: ServiceName
+    ) -> None:
+        self._by_key.pop((org_id.value, str(service_name)), None)
+
+    async def bulk_enable(
+        self,
+        org_id: OrgId,
+        service_names: Sequence[ServiceName],
+        *,
+        source: str,
+    ) -> None:
+        for name in service_names:
+            await self.enable(org_id, name, source=source)

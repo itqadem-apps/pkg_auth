@@ -50,8 +50,10 @@ from .base import AclBase
 from .mixins import (
     MembershipMixin,
     OrganizationMixin,
+    OrganizationServiceMixin,
     PermissionMixin,
     RoleMixin,
+    ServiceMixin,
     UserMixin,
 )
 
@@ -97,6 +99,37 @@ class PermissionORM(AclBase, PermissionMixin):
         Uuid(as_uuid=True),
         primary_key=True,
         server_default=text("gen_random_uuid()"),
+    )
+
+
+class ServiceORM(AclBase, ServiceMixin):
+    __tablename__ = "services"
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+
+
+class OrganizationServiceORM(AclBase, OrganizationServiceMixin):
+    __tablename__ = "organization_services"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id", "service_name",
+            name="uq_org_services_org_service",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    organization_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True,
     )
 
 

@@ -13,8 +13,10 @@ from .entities import (
     AuthContext,
     Membership,
     Organization,
+    OrganizationService,
     Permission,
     Role,
+    Service,
     User,
 )
 from .value_objects import (
@@ -22,6 +24,7 @@ from .value_objects import (
     PermissionKey,
     RoleId,
     RoleName,
+    ServiceName,
     UserId,
 )
 
@@ -29,8 +32,14 @@ if TYPE_CHECKING:
     from ..application.use_cases.register_permission_catalog import (
         CatalogEntry,
     )
+    from ..application.use_cases.sync_service_catalog import ServiceSpec
 
-PermissionScope = Literal["org", "platform", "all"]
+# Role-builder visibility filter:
+#   - "platform"      → platform_only ∪ shared (what a platform-org role may use)
+#   - "tenant"/"org"  → shared ∪ tenant_only  (what a normal-org role may use)
+#   - "all"           → no filter
+# "org" is kept as a backward-compatible alias for "tenant".
+PermissionScope = Literal["org", "tenant", "platform", "all"]
 
 
 class UserRepository(Protocol):
@@ -121,12 +130,12 @@ class MembershipRepository(Protocol):
 class PermissionCatalogRepository(Protocol):
     """Read/write access to the ``permissions`` table (the global perm catalog).
 
-    The ``scope`` argument on the list methods filters by the
-    ``is_platform`` flag on each catalog row:
+    The ``scope`` argument on the list methods filters by each row's
+    ``visibility``:
 
-    - ``"org"``      → only permissions usable inside an organization
-    - ``"platform"`` → only platform/system-level permissions
-    - ``"all"``      → no filter (default)
+    - ``"platform"``     → platform_only ∪ shared
+    - ``"tenant"``/``"org"`` → shared ∪ tenant_only
+    - ``"all"``          → no filter (default)
     """
 
     async def register_many(
@@ -141,6 +150,13 @@ class PermissionCatalogRepository(Protocol):
     async def list_for_service(
         self, service_name: str, *, scope: PermissionScope = "all"
     ) -> list[Permission]: ...
+    async def get_service_map(self) -> dict[str, str]:
+        """Return a ``{permission_key: service_name}`` map for the whole
+        catalog. Used by the service guard in
+        :class:`ResolveAuthContextUseCase` to map a user's perm keys to the
+        services that own them. Small and slow-changing → cacheable.
+        """
+        ...
     async def prune_absent(
         self,
         *,
@@ -155,3 +171,47 @@ class PermissionCatalogRepository(Protocol):
         role assignments referencing the pruned rows are silently dropped.
         """
         ...
+
+
+class ServiceRepository(Protocol):
+    """Read/write access to the ``services`` table (the service registry).
+
+    Vendor-controlled flags (``auto_provision``, ``saas_available``) are
+    written only via :meth:`upsert_many` (the ``pkg-auth-sync-services``
+    path). :meth:`ensure_exists` is called during permission-catalog
+    registration to create a bare row with safe defaults so the
+    default-deny guard does not strip a newly-registered service's perms
+    before the vendor configures it; it must NOT overwrite existing flags.
+    """
+
+    async def upsert_many(self, services: Sequence["ServiceSpec"]) -> None: ...
+    async def ensure_exists(self, *, service_name: str) -> None: ...
+    async def get(self, name: ServiceName) -> Service | None: ...
+    async def list_all(self) -> list[Service]: ...
+    async def prune_absent(
+        self, *, keep: Iterable[ServiceName]
+    ) -> int: ...
+
+
+class OrganizationServiceRepository(Protocol):
+    """Read/write access to the ``organization_services`` table (per-org
+    service entitlements that drive the service guard).
+    """
+
+    async def list_enabled_service_names(self, org_id: OrgId) -> set[str]: ...
+    async def get(
+        self, org_id: OrgId, service_name: ServiceName
+    ) -> OrganizationService | None: ...
+    async def enable(
+        self, org_id: OrgId, service_name: ServiceName, *, source: str
+    ) -> OrganizationService: ...
+    async def disable(
+        self, org_id: OrgId, service_name: ServiceName
+    ) -> None: ...
+    async def bulk_enable(
+        self,
+        org_id: OrgId,
+        service_names: Sequence[ServiceName],
+        *,
+        source: str,
+    ) -> None: ...

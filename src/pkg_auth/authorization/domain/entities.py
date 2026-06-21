@@ -15,11 +15,14 @@ from uuid import UUID
 
 from .exceptions import MissingPermission
 from .value_objects import (
+    LocalizedText,
     OrgId,
     PermissionId,
     PermissionKey,
+    PermissionVisibility,
     RoleId,
     RoleName,
+    ServiceName,
     UserId,
 )
 
@@ -56,17 +59,55 @@ class Permission:
     """A row from the ``permissions`` table (the global permission catalog).
 
     Each downstream service registers its own permission keys on boot
-    via ``RegisterPermissionCatalogUseCase``. ``is_platform`` marks
-    permissions that only apply at the platform/system level (e.g.
-    ``organizations:create``) so the central role editor can filter
-    them out of org-scoped role builders.
+    via ``RegisterPermissionCatalogUseCase``. ``visibility`` controls
+    which role builders may see/use the permission (platform-only,
+    shared, or tenant-only — hidden from the platform org). ``description``
+    is a localized text map (``{"en": ..., "ar": ...}``) for the central
+    role-editor UI.
     """
 
     id: PermissionId
     key: PermissionKey
     service_name: str
-    description: str | None
-    is_platform: bool = False
+    description: LocalizedText
+    visibility: PermissionVisibility = PermissionVisibility.SHARED
+
+
+@dataclass(frozen=True, slots=True)
+class Service:
+    """A row from the ``services`` table — a deployable product surface
+    (e.g. ``assessments``, ``courses``) that an organization may be granted.
+
+    ``auto_provision`` services are enabled automatically for every new
+    organization. ``saas_available`` marks a service the **vendor** has
+    greenlit to be offered as SaaS; only those may be enabled for an org
+    through the runtime API. Both flags are vendor-controlled and set via
+    the ``pkg-auth-sync-services`` CLI / config — never a runtime endpoint.
+    """
+
+    name: ServiceName
+    display_label: LocalizedText
+    auto_provision: bool = False
+    saas_available: bool = False
+    created_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class OrganizationService:
+    """A row from the ``organization_services`` table — the entitlement
+    linking an organization to a service it may use.
+
+    ``source`` is ``"auto"`` (granted by default-service provisioning) or
+    ``"manual"`` (toggled by a platform admin). The service guard in
+    :class:`ResolveAuthContextUseCase` drops any permission whose
+    ``service_name`` is not enabled for the org.
+    """
+
+    organization_id: OrgId
+    service_name: ServiceName
+    enabled: bool = True
+    source: str = "manual"
+    granted_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

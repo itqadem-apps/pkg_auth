@@ -14,12 +14,31 @@ The schema lives in a Postgres schema called `acl` and contains:
 |---|---|
 | `users` | Lazily upserted from JWT on first sight. FK anchor for memberships. |
 | `organizations` | Top-level grouping. Identified by `slug` (string) or `id` (bigint). |
-| `permissions` | Global permission catalog. Populated by services on boot. |
+| `permissions` | Global permission catalog. Populated by services on boot. Each row has a `visibility` (`platform_only`/`shared`/`tenant_only`) and a localized JSONB `description`. |
 | `roles` | Per-org (or global template). Links to permissions via `role_permissions`. |
 | `role_permissions` | Many-to-many join between roles and permissions. |
 | `memberships` | One row per (user, org). Links user to a role in that org. `UNIQUE(user_id, organization_id)` enforces single-role per (user, org) in v1. |
 | `membership_invitations` | Pending invitations for non-member users. |
 | `auth_audit_log` | Append-only log of ACL mutations. |
+| `services` | Service registry. Vendor-controlled `auto_provision` / `saas_available` flags, set via `pkg-auth-sync-services`. |
+| `organization_services` | Per-org service entitlements driving the default-deny service guard. |
+
+### Permission visibility & the service guard
+
+`permissions.visibility` controls which role builders may use a permission:
+`platform_only` (platform org only), `shared` (everywhere, default), and
+`tenant_only` (normal orgs only — **hidden from the platform org**). The catalog
+repo's `scope=` filter maps to this: `"platform"` → platform_only ∪ shared,
+`"tenant"`/`"org"` → shared ∪ tenant_only.
+
+The **service guard** (`ResolveAuthContextUseCase` with `org_service_repo` +
+`catalog_repo` + `platform_org_id`) filters a user's resolved permissions down
+to the services their org has enabled in `organization_services`
+(**default-deny** — a perm whose owning service is not enabled is dropped). The
+platform org bypasses the guard. New orgs get `auto_provision` services via
+`ProvisionDefaultServicesUseCase`; platform admins toggle `saas_available`
+services via `SetOrganizationServiceUseCase`. See
+[Upgrade-Service-Guard](Upgrade-Service-Guard.md) for wiring.
 
 ### Applying migrations
 

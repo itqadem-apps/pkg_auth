@@ -59,16 +59,52 @@ class OrganizationMixin(models.Model):
 class PermissionMixin(models.Model):
     """ACL columns for the permissions (catalog) table.
 
-    ``is_platform`` distinguishes permissions that operate inside a single
-    organization (default) from permissions that only make sense at
-    platform/system level across organizations.
+    ``visibility`` controls which role builders may see/use the permission:
+    ``platform_only`` (platform org only), ``shared`` (everywhere, default),
+    or ``tenant_only`` (normal orgs only — hidden from the platform org).
+    ``description`` is a localized JSONB ``{locale: text}`` map.
     """
 
     key = models.CharField(max_length=255, unique=True)
     service_name = models.CharField(max_length=64)
-    description = models.TextField(null=True, blank=True)
-    is_platform = models.BooleanField(default=False)
+    description = models.JSONField(null=True, blank=True)
+    visibility = models.CharField(max_length=32, default="shared")
     registered_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        app_label = "pkg_auth_acl"
+
+
+class ServiceMixin(models.Model):
+    """ACL columns for the ``services`` table (the service registry).
+
+    ``auto_provision`` and ``saas_available`` are vendor-controlled and set
+    only via the ``pkg-auth-sync-services`` path. ``display_label`` is a
+    localized JSONB map.
+    """
+
+    name = models.CharField(max_length=64, unique=True)
+    display_label = models.JSONField(null=True, blank=True)
+    auto_provision = models.BooleanField(default=False)
+    saas_available = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+        app_label = "pkg_auth_acl"
+
+
+class OrganizationServiceMixin(models.Model):
+    """ACL columns for the ``organization_services`` table (per-org service
+    entitlements). The FK to organizations lives on the concrete model.
+    """
+
+    service_name = models.CharField(max_length=64)
+    enabled = models.BooleanField(default=True)
+    source = models.CharField(max_length=16, default="manual")
+    granted_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         abstract = True

@@ -7,8 +7,8 @@ from typing import Sequence
 from ...domain.entities import Role
 from ...domain.exceptions import UnknownRole
 from ...domain.ports import PermissionCatalogRepository, RoleRepository
-from ...domain.value_objects import PermissionKey, RoleId, RoleName
-from ._helpers import validate_permission_keys_exist
+from ...domain.value_objects import OrgId, PermissionKey, RoleId, RoleName
+from ._helpers import validate_permission_keys_for_role
 
 
 @dataclass(slots=True)
@@ -27,6 +27,7 @@ class UpdateRoleUseCase:
 
     role_repo: RoleRepository
     catalog_repo: PermissionCatalogRepository
+    platform_org_id: OrgId | None = None
 
     async def execute(
         self,
@@ -36,11 +37,16 @@ class UpdateRoleUseCase:
         description: str | None = None,
         permission_keys: Sequence[PermissionKey] | None = None,
     ) -> Role:
-        if await self.role_repo.get(role_id) is None:
+        existing = await self.role_repo.get(role_id)
+        if existing is None:
             raise UnknownRole(f"role {role_id} not found")
 
         if permission_keys is not None:
-            await validate_permission_keys_exist(self.catalog_repo, permission_keys)
+            await validate_permission_keys_for_role(
+                self.catalog_repo,
+                permission_keys,
+                is_platform_org=self._is_platform_org(existing.organization_id),
+            )
 
         return await self.role_repo.update(
             role_id,
@@ -48,3 +54,8 @@ class UpdateRoleUseCase:
             description=description,
             permission_keys=permission_keys,
         )
+
+    def _is_platform_org(self, org_id: OrgId | None) -> bool | None:
+        if org_id is None or self.platform_org_id is None:
+            return None
+        return org_id == self.platform_org_id

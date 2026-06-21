@@ -25,6 +25,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, String, Text, func, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -72,27 +73,81 @@ class OrganizationMixin:
 class PermissionMixin:
     """ACL columns for the permissions (catalog) table.
 
-    ``is_platform`` distinguishes permissions that operate inside a single
-    organization (default) from permissions that only make sense at
-    platform/system level across organizations (e.g. ``organizations:create``,
-    ``organizations:approve``). Consuming services declare the flag inline
-    when registering via :class:`CatalogEntry`; the central ACL UI filters
-    by it via the ``scope=`` argument on the catalog repo.
+    ``visibility`` controls which role builders may see/use the permission:
+    ``platform_only`` (platform org only), ``shared`` (everywhere, default),
+    or ``tenant_only`` (normal orgs only — hidden from the platform org).
+    Consuming services declare it inline via :class:`CatalogEntry`; the
+    central ACL UI filters by it via the ``scope=`` argument on the catalog
+    repo. ``description`` is a localized JSONB map (``{locale: text}``).
     """
 
     key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     service_name: Mapped[str] = mapped_column(String(64), index=True)
-    description: Mapped[str | None] = mapped_column(Text)
-    is_platform: Mapped[bool] = mapped_column(
-        Boolean,
+    description: Mapped[dict | None] = mapped_column(JSONB)
+    visibility: Mapped[str] = mapped_column(
+        String(32),
         nullable=False,
-        default=False,
-        server_default=text("false"),
+        default="shared",
+        server_default=text("'shared'"),
+        index=True,
     )
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class ServiceMixin:
+    """ACL columns for the ``services`` table (the service registry).
+
+    ``auto_provision`` and ``saas_available`` are vendor-controlled and set
+    only via the ``pkg-auth-sync-services`` path. ``display_label`` is a
+    localized JSONB map.
+    """
+
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    display_label: Mapped[dict | None] = mapped_column(JSONB)
+    auto_provision: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    saas_available: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class OrganizationServiceMixin:
+    """ACL columns for the ``organization_services`` table (per-org service
+    entitlements). FK columns and the ``(organization_id, service_name)``
+    unique constraint live on the concrete model.
+    """
+
+    service_name: Mapped[str] = mapped_column(String(64), index=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'manual'")
+    )
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )
 
 

@@ -12,9 +12,12 @@ import json
 from dataclasses import dataclass
 from uuid import UUID
 
-from ...domain.entities import AuthContext, Membership
-from ...domain.ports import MembershipRepository
-from ...domain.value_objects import OrgId, RoleId, RoleName, UserId
+from ...domain.entities import AuthContext, Membership, OrganizationService
+from ...domain.ports import (
+    MembershipRepository,
+    OrganizationServiceRepository,
+)
+from ...domain.value_objects import OrgId, RoleId, RoleName, ServiceName, UserId
 from .protocol import Cache
 
 DEFAULT_TTL_SECONDS = 30
@@ -22,6 +25,10 @@ DEFAULT_TTL_SECONDS = 30
 
 def _auth_context_key(user_id: UserId, org_id: OrgId) -> str:
     return f"auth_ctx:{user_id}:{org_id}"
+
+
+def _org_services_key(org_id: OrgId) -> str:
+    return f"org_services:{org_id}"
 
 
 def _serialize_auth_context(ctx: AuthContext) -> bytes:
@@ -115,3 +122,60 @@ class CachedMembershipRepository:
 
     async def list_for_user(self, user_id: UserId) -> list[Membership]:
         return await self.inner.list_for_user(user_id)
+
+
+@dataclass(slots=True)
+class CachedOrganizationServiceRepository:
+    """Cache-decorating wrapper around an ``OrganizationServiceRepository``.
+
+    Caches the per-org enabled-service-name set — read on every protected
+    request by the service guard in ``ResolveAuthContextUseCase``. Writes
+    (``enable`` / ``disable`` / ``bulk_enable``) invalidate the org's key.
+    """
+
+    inner: OrganizationServiceRepository
+    cache: Cache
+    ttl_seconds: int = DEFAULT_TTL_SECONDS
+
+    async def list_enabled_service_names(self, org_id: OrgId) -> set[str]:
+        cache_key = _org_services_key(org_id)
+        blob = await self.cache.get(cache_key)
+        if blob is not None:
+            return set(json.loads(blob.decode("utf-8")))
+        names = await self.inner.list_enabled_service_names(org_id)
+        await self.cache.set(
+            cache_key,
+            json.dumps(sorted(names)).encode("utf-8"),
+            ttl_seconds=self.ttl_seconds,
+        )
+        return names
+
+    async def get(
+        self, org_id: OrgId, service_name: ServiceName
+    ) -> OrganizationService | None:
+        return await self.inner.get(org_id, service_name)
+
+    async def enable(
+        self, org_id: OrgId, service_name: ServiceName, *, source: str
+    ) -> OrganizationService:
+        result = await self.inner.enable(
+            org_id, service_name, source=source
+        )
+        await self.cache.delete(_org_services_key(org_id))
+        return result
+
+    async def disable(
+        self, org_id: OrgId, service_name: ServiceName
+    ) -> None:
+        await self.inner.disable(org_id, service_name)
+        await self.cache.delete(_org_services_key(org_id))
+
+    async def bulk_enable(
+        self,
+        org_id: OrgId,
+        service_names: "list[ServiceName] | tuple[ServiceName, ...]",
+        *,
+        source: str,
+    ) -> None:
+        await self.inner.bulk_enable(org_id, service_names, source=source)
+        await self.cache.delete(_org_services_key(org_id))

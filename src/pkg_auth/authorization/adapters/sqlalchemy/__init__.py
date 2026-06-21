@@ -26,8 +26,10 @@ from .base import AclBase, create_acl_base
 from .mixins import (
     MembershipMixin,
     OrganizationMixin,
+    OrganizationServiceMixin,
     PermissionMixin,
     RoleMixin,
+    ServiceMixin,
     UserMixin,
 )
 from .models import (
@@ -35,15 +37,21 @@ from .models import (
     MembershipInvitationORM,
     MembershipORM,
     OrganizationORM,
+    OrganizationServiceORM,
     PermissionORM,
     RoleORM,
     RolePermissionORM,
+    ServiceORM,
     UserORM,
 )
 from .repositories.membership import SqlAlchemyMembershipRepository
 from .repositories.organization import SqlAlchemyOrganizationRepository
+from .repositories.organization_service import (
+    SqlAlchemyOrganizationServiceRepository,
+)
 from .repositories.permission_catalog import SqlAlchemyPermissionCatalogRepository
 from .repositories.role import SqlAlchemyRoleRepository
+from .repositories.service import SqlAlchemyServiceRepository
 from .repositories.user import SqlAlchemyUserRepository
 
 MIGRATIONS_DIR: str = str(Path(__file__).parent / "migrations" / "versions")
@@ -58,6 +66,8 @@ __all__ = [
     "PermissionMixin",
     "RoleMixin",
     "MembershipMixin",
+    "ServiceMixin",
+    "OrganizationServiceMixin",
     # ORM models
     "UserORM",
     "OrganizationORM",
@@ -67,10 +77,14 @@ __all__ = [
     "MembershipORM",
     "MembershipInvitationORM",
     "AuthAuditLogORM",
+    "ServiceORM",
+    "OrganizationServiceORM",
     # Repositories
     "SqlAlchemyUserRepository",
     "SqlAlchemyOrganizationRepository",
     "SqlAlchemyRoleRepository",
     "SqlAlchemyMembershipRepository",
     "SqlAlchemyPermissionCatalogRepository",
+    "SqlAlchemyServiceRepository",
+    "SqlAlchemyOrganizationServiceRepository",
 ]

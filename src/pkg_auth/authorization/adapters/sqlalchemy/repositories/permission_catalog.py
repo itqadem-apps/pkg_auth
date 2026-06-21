@@ -11,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ....application.use_cases.register_permission_catalog import CatalogEntry
 from ....domain.entities import Permission
 from ....domain.ports import PermissionScope
-from ....domain.value_objects import PermissionId, PermissionKey
+from ....domain.value_objects import (
+    LocalizedText,
+    PermissionId,
+    PermissionKey,
+    PermissionVisibility,
+)
 from ..models import PermissionORM as DefaultPermissionORM
 
 
@@ -20,16 +25,22 @@ def _to_permission(row: Any) -> Permission:
         id=PermissionId(row.id),
         key=PermissionKey(row.key),
         service_name=row.service_name,
-        description=row.description,
-        is_platform=bool(row.is_platform),
+        description=LocalizedText(row.description or {}),
+        visibility=PermissionVisibility(row.visibility),
     )
 
 
 def _scope_clause(model: type, scope: PermissionScope):
-    if scope == "org":
-        return model.is_platform.is_(False)
+    if scope in ("org", "tenant"):
+        return model.visibility.in_(
+            (PermissionVisibility.SHARED.value,
+             PermissionVisibility.TENANT_ONLY.value)
+        )
     if scope == "platform":
-        return model.is_platform.is_(True)
+        return model.visibility.in_(
+            (PermissionVisibility.PLATFORM_ONLY.value,
+             PermissionVisibility.SHARED.value)
+        )
     return None
 
 
@@ -50,8 +61,8 @@ class SqlAlchemyPermissionCatalogRepository:
             {
                 "key": str(entry.key),
                 "service_name": service_name,
-                "description": entry.description,
-                "is_platform": entry.is_platform,
+                "description": entry.description.as_dict() or None,
+                "visibility": entry.visibility.value,
             }
             for entry in entries
         ]
@@ -61,7 +72,7 @@ class SqlAlchemyPermissionCatalogRepository:
             set_={
                 "service_name": stmt.excluded.service_name,
                 "description": stmt.excluded.description,
-                "is_platform": stmt.excluded.is_platform,
+                "visibility": stmt.excluded.visibility,
             },
         )
         async with self.session_factory() as session:
@@ -93,6 +104,12 @@ class SqlAlchemyPermissionCatalogRepository:
                 stmt = stmt.where(clause)
             rows = (await session.execute(stmt)).scalars().all()
             return [_to_permission(r) for r in rows]
+
+    async def get_service_map(self) -> dict[str, str]:
+        async with self.session_factory() as session:
+            stmt = select(self.model.key, self.model.service_name)
+            rows = (await session.execute(stmt)).all()
+            return {key: service_name for key, service_name in rows}
 
     async def prune_absent(
         self,

@@ -44,3 +44,25 @@ class UnknownRole(AuthorizationError):
 
 class UnknownPermission(AuthorizationError):
     """A referenced permission key is not registered in the catalog."""
+
+
+class PermissionVisibilityConflict(AuthorizationError):
+    """A role tried to use a permission whose visibility forbids it.
+
+    Raised when a platform-org role references a ``tenant_only`` permission,
+    or a normal-org role references a ``platform_only`` permission.
+    """
+
+
+class UnknownService(AuthorizationError):
+    """The referenced service is not registered in the ``services`` table."""
+
+
+class ServiceNotSaaSAvailable(AuthorizationError):
+    """A platform admin tried to enable a service the vendor has not marked
+    ``saas_available``. Integration layers map this to HTTP 403.
+    """
+
+
+class ServiceNotEnabled(AuthorizationError):
+    """The organization does not have the required service enabled."""

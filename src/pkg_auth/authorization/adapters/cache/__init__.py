@@ -9,7 +9,10 @@ Public API:
 """
 from __future__ import annotations
 
-from .decorators import CachedMembershipRepository
+from .decorators import (
+    CachedMembershipRepository,
+    CachedOrganizationServiceRepository,
+)
 from .memory import InMemoryTTLCache
 from .protocol import Cache
 
@@ -17,6 +20,7 @@ __all__ = [
     "Cache",
     "InMemoryTTLCache",
     "CachedMembershipRepository",
+    "CachedOrganizationServiceRepository",
 ]
 
 # RedisCache is opt-in via the cache-redis extra. Don't import it

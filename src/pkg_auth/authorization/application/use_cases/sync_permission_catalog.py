@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from ...domain.ports import PermissionCatalogRepository
+from ...domain.ports import PermissionCatalogRepository, ServiceRepository
 from .register_permission_catalog import (
     CatalogEntry,
     CatalogEntryInput,
@@ -44,6 +44,7 @@ class SyncPermissionCatalogUseCase:
     """
 
     catalog_repo: PermissionCatalogRepository
+    service_repo: ServiceRepository | None = None
 
     async def execute(
         self,
@@ -68,6 +69,8 @@ class SyncPermissionCatalogUseCase:
                 dry_run=True,
             )
 
+        if self.service_repo is not None:
+            await self.service_repo.ensure_exists(service_name=service_name)
         await self.catalog_repo.register_many(
             service_name=service_name,
             entries=normalized,

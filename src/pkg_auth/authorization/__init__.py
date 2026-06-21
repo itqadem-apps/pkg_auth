@@ -16,12 +16,16 @@ adapters in M4 / M6; cache layer in M5; framework integrations in M7-M9.
 from __future__ import annotations
 
 from .application.use_cases.register_permission_catalog import CatalogEntry
+from .application.use_cases.sync_service_catalog import ServiceSpec
+from .config import default_locale
 from .domain.entities import (
     AuthContext,
     Membership,
     Organization,
+    OrganizationService,
     Permission,
     Role,
+    Service,
     User,
 )
 from .platform import is_platform_context
@@ -29,26 +33,35 @@ from .domain.exceptions import (
     AuthorizationError,
     MissingPermission,
     NotAMember,
+    PermissionVisibilityConflict,
+    ServiceNotEnabled,
+    ServiceNotSaaSAvailable,
     UnknownOrganization,
     UnknownPermission,
     UnknownRole,
+    UnknownService,
     UnknownUser,
     UserNotProvisioned,
 )
 from .domain.ports import (
     MembershipRepository,
     OrganizationRepository,
+    OrganizationServiceRepository,
     PermissionCatalogRepository,
     PermissionScope,
     RoleRepository,
+    ServiceRepository,
     UserRepository,
 )
 from .domain.value_objects import (
+    LocalizedText,
     OrgId,
     PermissionId,
     PermissionKey,
+    PermissionVisibility,
     RoleId,
     RoleName,
+    ServiceName,
     UserId,
 )
 
@@ -60,6 +73,8 @@ __all__ = [
     "Role",
     "Membership",
     "AuthContext",
+    "Service",
+    "OrganizationService",
     # Value objects
     "UserId",
     "OrgId",
@@ -67,15 +82,23 @@ __all__ = [
     "PermissionId",
     "RoleName",
     "PermissionKey",
+    "PermissionVisibility",
+    "ServiceName",
+    "LocalizedText",
     # Ports (Protocols)
     "UserRepository",
     "OrganizationRepository",
     "RoleRepository",
     "MembershipRepository",
     "PermissionCatalogRepository",
+    "ServiceRepository",
+    "OrganizationServiceRepository",
     # Application DTOs
     "CatalogEntry",
+    "ServiceSpec",
     "PermissionScope",
+    # Config
+    "default_locale",
     # Platform helpers
     "is_platform_context",
     # Exceptions
@@ -86,5 +109,9 @@ __all__ = [
     "UnknownUser",
     "UnknownRole",
     "UnknownPermission",
+    "UnknownService",
+    "ServiceNotSaaSAvailable",
+    "ServiceNotEnabled",
+    "PermissionVisibilityConflict",
     "UserNotProvisioned",
 ]
