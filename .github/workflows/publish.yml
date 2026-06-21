@@ -89,3 +89,10 @@ jobs:
           # No username/password: OIDC trusted publishing is used.
           # Skip re-uploading a version that already exists (idempotent reruns).
           skip-existing: true
+          # Disable PEP 740 attestations: this publish runs as a reusable
+          # workflow (workflow_call from release-pkg-auth.yml), so the
+          # attestation's Build Config URI is the TOP-LEVEL workflow
+          # (release-pkg-auth.yml) while the trusted publisher is registered as
+          # publish.yml. Those can't both match one filename when nesting, so
+          # PyPI rejects the attestation (400). OIDC auth itself still works.
+          attestations: false
