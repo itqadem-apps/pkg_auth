@@ -116,8 +116,9 @@ resolve_use_case=ResolveAuthContextUseCase(
 )
 ```
 
-Keep the org's enabled-service set in sync with the catalog via the
-`pkg-auth-sync-services` CLI, and wrap `org_service_repo` in
+Populate the service registry — each service self-registers its identity via
+`pkg-auth-sync-catalog` and the vendor sets `auto_provision` / `saas_available`
+flags via `pkg-auth-sync-services` — and wrap `org_service_repo` in
 `CachedOrganizationServiceRepository` to cache the enabled-service set on the
 guard hot path.
 

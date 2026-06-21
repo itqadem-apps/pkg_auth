@@ -20,7 +20,7 @@ The schema lives in a Postgres schema called `acl` and contains:
 | `memberships` | One row per (user, org, role). Links a user to a role in an org. `UNIQUE(user_id, organization_id, role_id)` — a user may hold **multiple roles** per (user, org); the resolved `AuthContext.perms` is the **union** of all active roles' permissions. |
 | `membership_invitations` | Pending invitations for non-member users. |
 | `auth_audit_log` | Append-only log of ACL mutations. |
-| `services` | Service registry. Vendor-controlled `auto_provision` / `saas_available` flags, set via `pkg-auth-sync-services`. |
+| `services` | Service registry. Split ownership: each service self-registers its identity (`name` + translatable JSONB `display_label`) via `pkg-auth-sync-catalog`; the vendor sets `auto_provision` / `saas_available` flags via `pkg-auth-sync-services` (flag overlay — no clobber, no prune by default). |
 | `organization_services` | Per-org service entitlements driving the default-deny service guard. |
 
 ### Permission visibility & the service guard
@@ -104,8 +104,9 @@ the `permissions` table only.
 - **Runtime role** — `SELECT` on all ACL tables. Used by the long-running
   process. No writes, ever.
 - **Sync role** — `SELECT` on ACL tables + `INSERT, UPDATE, DELETE` on
-  `permissions` only. Used exclusively by the init container. Can have a
-  short lease TTL (minutes).
+  `permissions`, plus `INSERT, UPDATE` on `services` (for self-registration —
+  see below; never the vendor flags). Used exclusively by the init container.
+  Can have a short lease TTL (minutes).
 
 **CLI usage:**
 
@@ -113,8 +114,23 @@ the `permissions` table only.
 pkg-auth-sync-catalog \
     --service courses \
     --catalog courses.domain.permissions:CATALOG \
+    --service-manifest courses.domain.permissions:SERVICE \
     --db-url "$ACL_DATABASE_URL"
 ```
+
+With `--service-manifest`, the service **self-registers its identity** — its
+`name` and a translatable JSONB `display_label` taken from a `ServiceManifest`:
+
+```python
+# courses/domain/permissions.py
+from pkg_auth.authorization import ServiceManifest
+SERVICE = ServiceManifest.make("courses", {"en": "Courses", "ar": "الدورات"})
+```
+
+This inserts/updates the service's own `services` row with safe default flags;
+it **never** touches the vendor-owned `auto_provision` / `saas_available` (those
+stay with `pkg-auth-sync-services`). The manifest name must match `--service`.
+Omitting `--service-manifest` still ensures a bare identity row (name only).
 
 `--dry-run` prints the diff (`to add`, `to prune`) without writing — useful
 the first time you run sync against an existing database.
